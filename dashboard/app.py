@@ -10,7 +10,9 @@ import time
 import json
 from pathlib import Path
 from datetime import datetime
+
 from flask import Flask, render_template, jsonify, send_file, request, Response
+from werkzeug.utils import secure_filename
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -35,17 +37,22 @@ DEFAULT_CONFIG = {
 }
 
 results_store = {}
+
 scan_status = {
     "last_scan": None,
     "scanning": False,
     "error": None,
+    "current_file": None,
+    "total_files": 0,
+    "completed_files": 0,
 }
+
 file_states = {}
 activity_log = []
 
 SUPPORTED_EXT = {".csv", ".xlsx", ".xls"}
 
-# This prevents multiple scans from running at the same time
+# Prevent duplicate scans from running at the same time
 scan_lock = threading.Lock()
 
 
@@ -53,8 +60,9 @@ def load_config():
     if CONFIG_FILE.exists():
         try:
             return {**DEFAULT_CONFIG, **json.loads(CONFIG_FILE.read_text())}
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Config load failed: {e}")
+
     return dict(DEFAULT_CONFIG)
 
 
@@ -87,6 +95,24 @@ def log_event(message, level="info"):
         activity_log.pop(0)
 
     print(f"  [{entry['ts']}] {message}")
+
+
+def cleanup_old_reports(keep_latest=20):
+    """
+    Keeps only the latest reports to avoid reports folder growing forever.
+    """
+
+    files = sorted(
+        REPORTS_DIR.glob("*.xlsx"),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+
+    for old_file in files[keep_latest:]:
+        try:
+            old_file.unlink()
+        except Exception as e:
+            log_event(f"Could not delete old report {old_file.name}: {e}", "warn")
 
 
 def discover_pairs():
@@ -132,6 +158,78 @@ def discover_pairs():
     return pairs
 
 
+def calculate_business_status(result, pass_threshold):
+    """
+    Strong SAP validation status logic.
+
+    PASS:
+        Field pass rate >= threshold
+        No records missing in source
+        No records missing in target
+
+    WARNING:
+        Field pass rate >= threshold
+        But source/target record counts do not reconcile
+
+    FAIL:
+        Field pass rate < threshold
+    """
+
+    ss = result.summary_stats
+    pass_rate = float(ss.get("pass_rate_pct", 0))
+
+    records_only_in_source = int(result.records_only_in_source or 0)
+    records_only_in_target = int(result.records_only_in_target or 0)
+
+    if pass_rate < pass_threshold:
+        return {
+            "status": "FAIL",
+            "field_status": "FAIL",
+            "record_status": "CHECKED",
+            "message": (
+                f"Field validation failed. Pass rate is {pass_rate:.2f}% "
+                f"which is below threshold {pass_threshold:.2f}%."
+            ),
+        }
+
+    if records_only_in_source > 0 or records_only_in_target > 0:
+        if records_only_in_source > 0 and records_only_in_target > 0:
+            record_message = (
+                f"{records_only_in_source:,} records exist only in source and "
+                f"{records_only_in_target:,} records exist only in target."
+            )
+        elif records_only_in_target > 0:
+            record_message = (
+                f"Target has {records_only_in_target:,} extra records "
+                f"not found in source."
+            )
+        else:
+            record_message = (
+                f"Source has {records_only_in_source:,} records "
+                f"not found in target."
+            )
+
+        return {
+            "status": "WARNING",
+            "field_status": "PASS",
+            "record_status": "WARNING",
+            "message": (
+                f"Field validation passed with {pass_rate:.2f}% "
+                f"against threshold {pass_threshold:.2f}%, but {record_message}"
+            ),
+        }
+
+    return {
+        "status": "PASS",
+        "field_status": "PASS",
+        "record_status": "PASS",
+        "message": (
+            f"Validation passed. Field pass rate is {pass_rate:.2f}% "
+            f"and source/target records are fully reconciled."
+        ),
+    }
+
+
 def run_validation(name, source_path, target_path):
     cfg = load_config()
 
@@ -147,6 +245,8 @@ def run_validation(name, source_path, target_path):
 
     result = validator.validate(source_path, target_path)
     ss = result.summary_stats
+
+    business_status = calculate_business_status(result, pass_threshold)
 
     field_rows = []
 
@@ -198,20 +298,34 @@ def run_validation(name, source_path, target_path):
 
     result_dict = {
         "name": name,
-        "status": result.overall_status,
+
+        # Stronger business result
+        "status": business_status["status"],
+        "validator_status": result.overall_status,
+        "field_status": business_status["field_status"],
+        "record_status": business_status["record_status"],
+        "business_message": business_status["message"],
+
+        # File details
         "source_file": Path(source_path).name,
         "target_file": Path(target_path).name,
+
+        # Record reconciliation
         "total_source_records": result.total_source_records,
         "total_target_records": result.total_target_records,
         "records_matched": result.records_matched,
         "records_only_in_source": result.records_only_in_source,
         "records_only_in_target": result.records_only_in_target,
+
+        # Field summary
         "fields_passed": ss["fields_passed"],
         "fields_failed": ss["fields_failed"],
         "total_fields": ss["total_fields_validated"],
         "pass_rate_pct": ss["pass_rate_pct"],
         "pass_threshold": pass_threshold,
         "selected_fields": selected_fields,
+
+        # Extra details
         "errors": result.errors,
         "mapping": mapping,
         "field_results": field_rows,
@@ -221,6 +335,7 @@ def run_validation(name, source_path, target_path):
 
     try:
         generate_excel_report(result_dict, str(excel_path))
+        cleanup_old_reports()
     except Exception as e:
         result_dict["excel_error"] = str(e)
         log_event(f"Excel failed for {name}: {e}", "error")
@@ -231,10 +346,7 @@ def run_validation(name, source_path, target_path):
 def scan_and_validate_all():
     """
     Scans source and target folders and validates matching file pairs.
-
-    Important:
     scan_lock prevents duplicate scans from running at the same time.
-    This is the main fix for the long-running issue.
     """
 
     if not scan_lock.acquire(blocking=False):
@@ -243,9 +355,15 @@ def scan_and_validate_all():
 
     scan_status["scanning"] = True
     scan_status["error"] = None
+    scan_status["current_file"] = None
+    scan_status["total_files"] = 0
+    scan_status["completed_files"] = 0
 
     try:
         pairs = discover_pairs()
+        valid_pairs = [p for p in pairs if p["has_pair"]]
+
+        scan_status["total_files"] = len(valid_pairs)
 
         for pair in pairs:
             name = pair["name"]
@@ -277,13 +395,17 @@ def scan_and_validate_all():
 
             if not existing:
                 log_event(
-                    f"{name}: new file pair — {pair['source_file']} + {pair['target_file']}",
+                    f"{name}: new file pair — "
+                    f"{pair['source_file']} + {pair['target_file']}",
                     "info",
                 )
             elif prev_state.get("_mtime") != last_mtime:
                 log_event(f"{name}: file changed — re-validating", "info")
             else:
+                scan_status["completed_files"] += 1
                 continue
+
+            scan_status["current_file"] = name
 
             file_states[name] = {
                 "state": "validating",
@@ -310,22 +432,36 @@ def scan_and_validate_all():
                     "source_file": pair["source_file"],
                     "target_file": pair["target_file"],
                     "_mtime": last_mtime,
+                    "status": result["status"],
+                    "field_status": result["field_status"],
+                    "record_status": result["record_status"],
+                    "message": result["business_message"],
                 }
 
-                level = "success" if result["status"] == "PASS" else "warn"
+                if result["status"] == "PASS":
+                    level = "success"
+                elif result["status"] == "WARNING":
+                    level = "warn"
+                else:
+                    level = "error"
 
                 log_event(
                     f"{name}: {result['status']} — "
-                    f"{result['fields_passed']}/{result['total_fields']} fields passed "
-                    f"(threshold {result['pass_threshold']}%), "
-                    f"{result['records_matched']:,} records matched",
+                    f"{result['business_message']} "
+                    f"Matched records: {result['records_matched']:,}, "
+                    f"Only in source: {result['records_only_in_source']:,}, "
+                    f"Only in target: {result['records_only_in_target']:,}",
                     level,
                 )
 
             except Exception as e:
                 file_states[name]["state"] = "error"
+                file_states[name]["error"] = str(e)
                 scan_status["error"] = str(e)
                 log_event(f"{name}: error — {e}", "error")
+
+            finally:
+                scan_status["completed_files"] += 1
 
         scan_status["last_scan"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -335,15 +471,14 @@ def scan_and_validate_all():
 
     finally:
         scan_status["scanning"] = False
+        scan_status["current_file"] = None
         scan_lock.release()
 
 
 def background_watcher(interval=60):
     """
     Optional automatic watcher.
-
-    Keep this disabled while testing.
-    If enabled, it scans every 60 seconds instead of every 5 seconds.
+    Keep disabled while testing.
     """
 
     while True:
@@ -368,19 +503,28 @@ def api_status():
     cfg = load_config()
     source_dir, target_dir = get_dirs()
 
+    selected_fields = cfg.get("selected_fields", [])
+
     return jsonify(
         {
             "last_scan": scan_status["last_scan"],
             "scanning": scan_status["scanning"],
             "error": scan_status["error"],
+            "current_file": scan_status["current_file"],
+            "total_files": scan_status["total_files"],
+            "completed_files": scan_status["completed_files"],
+
             "source_dir": str(source_dir),
             "target_dir": str(target_dir),
             "pairs": pairs,
             "file_states": file_states,
+
             "total_tables": len([p for p in pairs if p["has_pair"]]),
             "unmatched": len([p for p in pairs if not p["has_pair"]]),
+
             "pass_threshold": cfg.get("pass_threshold", 100.0),
-            "selected_fields": cfg.get("selected_fields", []),
+            "selected_fields": selected_fields,
+            "validation_mode": "all_fields" if not selected_fields else "selected_fields",
         }
     )
 
@@ -421,9 +565,14 @@ def upload_labels():
         return jsonify({"error": "No file"}), 400
 
     f = request.files["file"]
+
+    if not f.filename:
+        return jsonify({"error": "No filename"}), 400
+
+    safe_name = secure_filename(f.filename)
     f.save(str(LABELS_FILE))
 
-    log_event(f"Custom labels uploaded: {f.filename}", "info")
+    log_event(f"Custom labels uploaded: {safe_name}", "info")
 
     results_store.clear()
 
@@ -433,7 +582,7 @@ def upload_labels():
 
     threading.Thread(target=scan_and_validate_all, daemon=True).start()
 
-    return jsonify({"ok": True, "filename": f.filename})
+    return jsonify({"ok": True, "filename": safe_name})
 
 
 def _handle_upload(req, dest_dir, side):
@@ -446,13 +595,16 @@ def _handle_upload(req, dest_dir, side):
         if not f.filename:
             continue
 
-        if Path(f.filename).suffix.lower() not in SUPPORTED_EXT:
-            return jsonify({"error": f"Unsupported: {f.filename}"}), 400
+        safe_name = secure_filename(f.filename)
+        suffix = Path(safe_name).suffix.lower()
 
-        f.save(str(dest_dir / f.filename))
+        if suffix not in SUPPORTED_EXT:
+            return jsonify({"error": f"Unsupported: {safe_name}"}), 400
 
-        log_event(f"Uploaded to {side}: {f.filename}", "info")
-        saved.append(f.filename)
+        f.save(str(dest_dir / safe_name))
+
+        log_event(f"Uploaded to {side}: {safe_name}", "info")
+        saved.append(safe_name)
 
     if saved:
         threading.Thread(target=scan_and_validate_all, daemon=True).start()
@@ -497,8 +649,8 @@ def api_set_config():
     changed = False
 
     for key in ("source_dir", "target_dir"):
-        if key in data and data[key].strip():
-            new_path = str(Path(data[key].strip()))
+        if key in data and str(data[key]).strip():
+            new_path = str(Path(str(data[key]).strip()))
 
             if new_path != cfg.get(key):
                 cfg[key] = new_path
@@ -513,7 +665,11 @@ def api_set_config():
             log_event(f"Pass threshold updated to {thr}%", "info")
 
     if "selected_fields" in data:
-        sel = [f.strip().upper() for f in data["selected_fields"] if f.strip()]
+        sel = [
+            str(f).strip().upper()
+            for f in data["selected_fields"]
+            if str(f).strip()
+        ]
 
         if sel != cfg.get("selected_fields", []):
             cfg["selected_fields"] = sel
@@ -526,6 +682,7 @@ def api_set_config():
 
     if changed:
         save_config(cfg)
+
         results_store.clear()
 
         for n in file_states:
@@ -625,6 +782,24 @@ def api_folders():
     )
 
 
+@app.route("/api/clear-results", methods=["POST"])
+def api_clear_results():
+    results_store.clear()
+    file_states.clear()
+    activity_log.clear()
+
+    scan_status["last_scan"] = None
+    scan_status["scanning"] = False
+    scan_status["error"] = None
+    scan_status["current_file"] = None
+    scan_status["total_files"] = 0
+    scan_status["completed_files"] = 0
+
+    log_event("Results cleared manually", "info")
+
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     s, t = get_dirs()
     cfg = load_config()
@@ -639,8 +814,8 @@ if __name__ == "__main__":
     # One scan at startup
     threading.Thread(target=scan_and_validate_all, daemon=True).start()
 
-    # Keep this disabled while testing to avoid repeated long scans.
-    # After testing, you can enable it with 60 seconds interval:
+    # Keep this disabled while testing.
+    # Enable only if you want automatic scanning every 60 seconds.
     # threading.Thread(target=background_watcher, args=(60,), daemon=True).start()
 
     app.run(debug=False, port=5000, use_reloader=False)
