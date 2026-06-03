@@ -3,46 +3,51 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SAP Migration Validator</title>
+<title>Genpact SAP Validator</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0f1117;--surface:#1a1d27;--surface2:#222536;
-  --border:#2e3248;--text:#e2e4f0;--muted:#7c82a0;
+  --bg:#0a0f1e;--surface:#111827;--surface2:#1a2236;
+  --border:#1e3a5f;--text:#e2e8f0;--muted:#6b8cad;
   --pass:#22c55e;--fail:#ef4444;--warn:#f59e0b;
-  --info:#3b82f6;--accent:#6366f1;
+  --info:#3b82f6;--accent:#1d4ed8;--accent2:#2563eb;
 }
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 18px;
-  display:flex;align-items:center;justify-content:space-between;height:52px;gap:8px}
-.logo{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap}
-.logo-mark{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+header{background:linear-gradient(90deg,#0f2554 0%,#1a3a7c 100%);
+  border-bottom:2px solid #e63946;padding:0 18px;
+  display:flex;align-items:center;justify-content:space-between;height:56px;gap:8px}
+.logo{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.logo-icon{width:28px;height:28px;background:#e63946;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#fff;flex-shrink:0}
+.logo-text{color:#fff;letter-spacing:.01em}
+.logo-text span{color:#e63946}
 .hdr-r{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .hbtn{border:none;padding:5px 13px;border-radius:6px;font-size:12px;cursor:pointer;
   font-weight:500;transition:opacity .2s;white-space:nowrap}
-.hbtn-accent{background:var(--accent);color:#fff}
-.hbtn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.hbtn-accent{background:#e63946;color:#fff;border:1px solid #c42d38}
+.hbtn-ghost{background:rgba(255,255,255,.08);color:#cbd5e1;border:1px solid rgba(255,255,255,.15)}
 .hbtn:hover:not(:disabled){opacity:.82}
 .hbtn:disabled{opacity:.4;cursor:default}
-.last-scan{font-size:11px;color:var(--muted);white-space:nowrap}
+.last-scan{font-size:11px;color:#94a3b8;white-space:nowrap}
 .thr-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;
-  background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.2);white-space:nowrap}
+  background:rgba(29,78,216,.3);color:#93c5fd;border:1px solid rgba(29,78,216,.5);white-space:nowrap}
 
-.layout{display:grid;grid-template-columns:250px 1fr;height:calc(100vh - 52px)}
+.layout{display:grid;grid-template-columns:260px 1fr;height:calc(100vh - 56px)}
 aside{background:var(--surface);border-right:1px solid var(--border);
   display:flex;flex-direction:column;overflow:hidden}
-.sb-head{padding:12px 14px 6px;font-size:10px;font-weight:600;color:var(--muted);
-  letter-spacing:.07em;text-transform:uppercase}
+.sb-head{padding:12px 14px 6px;font-size:10px;font-weight:700;color:var(--muted);
+  letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border);
+  background:linear-gradient(180deg,#0f2554 0%,var(--surface) 100%);color:#93c5fd}
 #table-list{flex:1;overflow-y:auto}
 .sb-item{display:flex;align-items:center;padding:9px 14px;cursor:pointer;
-  border-left:2px solid transparent;transition:background .14s;font-size:12px;gap:7px}
+  border-left:3px solid transparent;transition:background .14s;font-size:12px;gap:7px}
 .sb-item:hover{background:var(--surface2)}
-.sb-item.active{background:var(--surface2);border-left-color:var(--accent)}
+.sb-item.active{background:var(--surface2);border-left-color:#e63946}
 .tname{font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sp{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;flex-shrink:0;white-space:nowrap}
 .sp-new{background:rgba(59,130,246,.2);color:#60a5fa}
 .sp-chg{background:rgba(245,158,11,.2);color:var(--warn)}
-.sp-val{background:rgba(99,102,241,.2);color:#a5b4fc;animation:blink .8s infinite}
+.sp-val{background:rgba(29,78,216,.25);color:#93c5fd;animation:blink .8s infinite}
 .sp-pass{background:rgba(34,197,94,.15);color:var(--pass)}
 .sp-warn{background:rgba(245,158,11,.15);color:var(--warn)}
 .sp-fail{background:rgba(239,68,68,.15);color:var(--fail)}
@@ -57,14 +62,15 @@ aside{background:var(--surface);border-right:1px solid var(--border);
 main{overflow-y:auto;padding:20px}
 #welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;
   height:100%;gap:18px;text-align:center}
-#welcome h2{font-size:20px;font-weight:500}
+#welcome h2{font-size:22px;font-weight:700;color:#fff}
+#welcome h2 span{color:#e63946}
 #welcome p{color:var(--muted);font-size:13px;max-width:480px;line-height:1.6}
 .upload-zone{background:var(--surface);border:1px solid var(--border);border-radius:10px;
   padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:14px;min-width:440px}
 .upload-box{background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:16px;text-align:center}
 .upload-box h4{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;
   letter-spacing:.06em;margin-bottom:9px}
-.ubtn{display:inline-block;background:var(--accent);color:#fff;border:none;
+.ubtn{display:inline-block;background:#1d4ed8;color:#fff;border:none;
   padding:7px 16px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;width:100%;margin-bottom:7px}
 .ubtn:hover{opacity:.85}
 .uhint{font-size:10px;color:var(--muted)}
@@ -72,27 +78,27 @@ main{overflow-y:auto;padding:20px}
 
 #detail{display:none}
 .det-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;gap:12px}
-.det-title{font-size:17px;font-weight:600}
+.det-title{font-size:17px;font-weight:700;color:#fff}
 .det-meta{font-size:11px;color:var(--muted);margin-top:3px}
 .det-right{display:flex;align-items:center;gap:7px;flex-shrink:0}
-.st-pill{font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px}
-.pill-pass{background:rgba(34,197,94,.15);color:var(--pass)}
-.pill-warn{background:rgba(245,158,11,.15);color:var(--warn)}
-.pill-fail{background:rgba(239,68,68,.15);color:var(--fail)}
-.pill-err{background:rgba(245,158,11,.15);color:var(--warn)}
-.dl-btn{background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3);
+.st-pill{font-size:12px;font-weight:700;padding:5px 16px;border-radius:20px}
+.pill-pass{background:rgba(34,197,94,.15);color:var(--pass);border:1px solid rgba(34,197,94,.3)}
+.pill-warn{background:rgba(245,158,11,.15);color:var(--warn);border:1px solid rgba(245,158,11,.3)}
+.pill-fail{background:rgba(239,68,68,.15);color:var(--fail);border:1px solid rgba(239,68,68,.3)}
+.pill-err{background:rgba(245,158,11,.15);color:var(--warn);border:1px solid rgba(245,158,11,.3)}
+.dl-btn{background:rgba(29,78,216,.2);color:#93c5fd;border:1px solid rgba(29,78,216,.4);
   padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;
   text-decoration:none;display:inline-flex;align-items:center;gap:5px}
-.dl-btn:hover{background:rgba(99,102,241,.25)}
+.dl-btn:hover{background:rgba(29,78,216,.35)}
 .dl-btn.disabled{opacity:.4;pointer-events:none}
 
-.thr-info{display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,.1);
-  border:1px solid rgba(99,102,241,.2);border-radius:6px;padding:4px 10px;
-  font-size:11px;color:#a5b4fc;margin-bottom:14px}
+.thr-info{display:inline-flex;align-items:center;gap:6px;background:rgba(29,78,216,.15);
+  border:1px solid rgba(29,78,216,.3);border-radius:6px;padding:4px 10px;
+  font-size:11px;color:#93c5fd;margin-bottom:14px}
 
 .banner{display:flex;align-items:center;gap:9px;padding:9px 13px;border-radius:8px;
   margin-bottom:16px;font-size:12px}
-.bn-val{background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.25);color:#a5b4fc}
+.bn-val{background:rgba(29,78,216,.15);border:1px solid rgba(29,78,216,.3);color:#93c5fd}
 .bn-chg{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:var(--warn)}
 .spinner{width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;
   border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
@@ -100,19 +106,23 @@ main{overflow-y:auto;padding:20px}
 
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:18px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:13px 14px}
-.card .n{font-size:22px;font-weight:600}
+.card .n{font-size:22px;font-weight:700}
 .card .l{font-size:10px;color:var(--muted);margin-top:2px}
 .card.ok .n{color:var(--pass)}
 .card.warn .n{color:var(--fail)}
+.card.blue .n{color:#60a5fa}
 
-.sec{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:18px 0 9px}
+.sec{font-size:10px;font-weight:700;color:#93c5fd;text-transform:uppercase;
+  letter-spacing:.08em;margin:18px 0 9px;display:flex;align-items:center;gap:8px}
+.sec::after{content:'';flex:1;height:1px;background:var(--border)}
 .tbl-wrap{border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:20px}
 table{width:100%;border-collapse:collapse;font-size:12px}
-th{background:var(--surface2);color:var(--muted);font-size:10px;font-weight:600;
-  text-transform:uppercase;letter-spacing:.05em;padding:8px 11px;text-align:left}
+th{background:linear-gradient(180deg,#0f2554 0%,#1a2236 100%);color:#93c5fd;
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  padding:9px 11px;text-align:left;border-bottom:1px solid var(--border)}
 td{padding:8px 11px;border-top:1px solid var(--border)}
 tr:nth-child(even) td{background:rgba(255,255,255,.015)}
-tr:hover td{background:var(--surface2)}
+tr:hover td{background:rgba(29,78,216,.07)}
 .fl{font-weight:500}
 .ft{font-size:10px;color:var(--muted)}
 .tn{font-size:10px;color:var(--info);font-weight:600}
@@ -136,7 +146,7 @@ tr:hover td{background:var(--surface2)}
 
 .map-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
 .map-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:11px 13px}
-.map-box h5{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;
+.map-box h5{font-size:10px;font-weight:600;color:#93c5fd;text-transform:uppercase;
   letter-spacing:.06em;margin-bottom:7px}
 .mtag{display:inline-flex;flex-direction:column;background:var(--surface2);
   border:1px solid var(--border);border-radius:5px;padding:3px 8px;margin:2px;font-size:11px}
@@ -151,7 +161,7 @@ tr:hover td{background:var(--surface2)}
   display:flex;flex-direction:column-reverse;gap:7px;z-index:200}
 .toast{background:var(--surface);border:1px solid var(--border);border-radius:8px;
   padding:10px 15px;font-size:12px;max-width:310px;
-  box-shadow:0 4px 14px rgba(0,0,0,.4);
+  box-shadow:0 4px 14px rgba(0,0,0,.5);
   display:flex;align-items:flex-start;gap:8px;animation:sli .22s ease}
 .toast.rm{animation:slo .22s ease forwards}
 .toast-m{flex:1;line-height:1.45}
@@ -162,14 +172,15 @@ tr:hover td{background:var(--surface2)}
 @keyframes sli{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
 @keyframes slo{to{opacity:0;transform:translateX(16px)}}
 
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);
   display:none;align-items:center;justify-content:center;z-index:100}
 .overlay.open{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:11px;
   width:600px;max-height:84vh;display:flex;flex-direction:column;overflow:hidden}
 .modal-hd{padding:15px 18px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between}
-.modal-hd h3{font-size:14px;font-weight:600}
+  display:flex;align-items:center;justify-content:space-between;
+  background:linear-gradient(90deg,#0f2554 0%,var(--surface) 100%)}
+.modal-hd h3{font-size:14px;font-weight:600;color:#fff}
 .mclose{background:none;border:none;color:var(--muted);font-size:19px;cursor:pointer;line-height:1}
 .mclose:hover{color:var(--text)}
 .modal-body{overflow-y:auto;padding:16px 18px}
@@ -187,26 +198,27 @@ tr:hover td{background:var(--surface2)}
   margin-bottom:5px;background:var(--surface2);font-size:12px;gap:10px}
 .rep-nm{font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rep-mt{font-size:10px;color:var(--muted);white-space:nowrap}
-.rep-dl{background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3);
+.rep-dl{background:rgba(29,78,216,.2);color:#93c5fd;border:1px solid rgba(29,78,216,.4);
   padding:3px 10px;border-radius:5px;font-size:11px;font-weight:600;text-decoration:none}
-.rep-dl:hover{background:rgba(99,102,241,.25)}
+.rep-dl:hover{background:rgba(29,78,216,.35)}
 
 /* Settings */
 .s-section{margin-bottom:18px}
-.s-section h4{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;
+.s-section h4{font-size:11px;font-weight:600;color:#93c5fd;text-transform:uppercase;
   letter-spacing:.06em;margin-bottom:9px}
 .f-row{display:flex;flex-direction:column;gap:4px;margin-bottom:11px}
 .f-row label{font-size:11px;color:var(--muted)}
 .f-row input[type=text]{background:var(--surface2);border:1px solid var(--border);
   color:var(--text);padding:7px 11px;border-radius:6px;font-size:12px;width:100%;outline:none}
-.f-row input[type=text]:focus{border-color:var(--accent)}
+.f-row input[type=text]:focus{border-color:#1d4ed8}
 .thr-row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.thr-row input[type=range]{flex:1;accent-color:var(--accent)}
-.thr-val{font-size:16px;font-weight:600;color:var(--accent);min-width:44px;text-align:right}
+.thr-row input[type=range]{flex:1;accent-color:#1d4ed8}
+.thr-val{font-size:16px;font-weight:700;color:#60a5fa;min-width:44px;text-align:right}
 .thr-note{font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5}
-.save-btn{background:var(--accent);color:#fff;border:none;padding:7px 18px;
-  border-radius:6px;font-size:12px;font-weight:500;cursor:pointer}
-.save-btn:hover{opacity:.85}
+.save-btn{background:#1d4ed8;color:#fff;border:none;padding:7px 18px;
+  border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;
+  transition:background .2s}
+.save-btn:hover{background:#2563eb}
 .s-status{font-size:11px;margin-top:6px;min-height:16px}
 .divider{border:none;border-top:1px solid var(--border);margin:16px 0}
 
@@ -214,30 +226,31 @@ tr:hover td{background:var(--surface2)}
 .fs-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .fs-note{font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px}
 .fs-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;
-  max-height:200px;overflow-y:auto;background:var(--surface2);
+  max-height:240px;overflow-y:auto;background:var(--surface2);
   border:1px solid var(--border);border-radius:7px;padding:8px}
 .fc-item{display:flex;align-items:center;gap:7px;padding:4px 6px;
   border-radius:4px;cursor:pointer;transition:background .12s}
 .fc-item:hover{background:var(--border)}
-.fc-item input[type=checkbox]{accent-color:var(--accent);cursor:pointer;width:13px;height:13px}
+.fc-item input[type=checkbox]{accent-color:#1d4ed8;cursor:pointer;width:13px;height:13px}
 .fc-label{font-size:11px;color:var(--text);flex:1}
 .fc-tech{font-size:9px;color:var(--muted)}
-.fs-btns{display:flex;gap:7px;margin-top:8px}
+.fs-btns{display:flex;gap:5px;flex-wrap:wrap}
 .fs-btn{font-size:11px;padding:4px 11px;border:1px solid var(--border);
-  border-radius:5px;background:transparent;color:var(--muted);cursor:pointer}
+  border-radius:5px;background:transparent;color:var(--muted);cursor:pointer;
+  transition:all .12s}
 .fs-btn:hover{background:var(--surface2);color:var(--text)}
-.fs-count{font-size:11px;color:var(--muted);align-self:center}
+.fs-count{font-size:11px;color:var(--muted);align-self:center;white-space:nowrap}
 
 .lbl-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .lbl-btn{background:var(--surface2);color:var(--muted);border:1px solid var(--border);
   padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer}
 .lbl-btn:hover{background:var(--border);color:var(--text)}
-.samp-dl{color:#a5b4fc;font-size:11px;font-weight:600;text-decoration:none;
-  background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);
+.samp-dl{color:#93c5fd;font-size:11px;font-weight:600;text-decoration:none;
+  background:rgba(29,78,216,.2);border:1px solid rgba(29,78,216,.4);
   padding:5px 12px;border-radius:6px}
-.samp-dl:hover{background:rgba(99,102,241,.25)}
+.samp-dl:hover{background:rgba(29,78,216,.35)}
 .empty-msg{color:var(--muted);font-size:13px;text-align:center;padding:26px}
-.scanning-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);
+.scanning-dot{width:7px;height:7px;border-radius:50%;background:#e63946;
   display:inline-block;animation:pulse 1s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 input[type=file]{display:none}
@@ -248,7 +261,10 @@ input[type=file]{display:none}
 </head>
 <body>
 <header>
-  <div class="logo"><div class="logo-mark"></div>SAP Migration Validator</div>
+  <div class="logo">
+    <div class="logo-icon">G</div>
+    <div class="logo-text">Genpact <span>SAP</span> Validator</div>
+  </div>
   <div class="hdr-r">
     <span id="scan-ind" style="display:none"><span class="scanning-dot"></span></span>
     <span class="last-scan" id="last-scan">Not scanned yet</span>
@@ -262,7 +278,7 @@ input[type=file]{display:none}
 
 <div class="layout">
   <aside>
-    <div class="sb-head">Tables</div>
+    <div class="sb-head">&#128202; Tables</div>
     <div id="table-list"></div>
     <div style="flex:1"></div>
     <div class="sb-footer">
@@ -274,7 +290,7 @@ input[type=file]{display:none}
   </aside>
   <main>
     <div id="welcome">
-      <h2>Post-Load Validation Dashboard</h2>
+      <h2>Genpact <span>SAP</span> Validator</h2>
       <p>Upload source and target files below, or set watched folder paths in Settings.
          Configure your pass threshold and choose which fields to validate — all in Settings.</p>
       <div class="upload-zone">
@@ -318,7 +334,7 @@ input[type=file]{display:none}
 
 <!-- Settings -->
 <div class="overlay" id="set-modal">
-  <div class="modal" style="width:640px">
+  <div class="modal" style="width:660px">
     <div class="modal-hd"><h3>&#9881; Settings</h3><button class="mclose" onclick="closeModal('set-modal')">&times;</button></div>
     <div class="modal-body">
 
@@ -355,19 +371,74 @@ input[type=file]{display:none}
       <div class="s-section">
         <h4>&#128203; Field Selection</h4>
         <div class="fs-note">
-          Choose which fields to validate. Only selected fields appear in the results and Excel report.
-          Leave <b>all unchecked</b> to validate every common field automatically.
+          Choose which fields to validate. You can load fields directly from any file
+          without running a scan first. Leave all checked to validate everything automatically.
         </div>
+
+        <!-- Load from files panel -->
+        <div style="background:var(--surface2);border:1px solid var(--border);
+                    border-radius:8px;padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:600;color:#93c5fd;text-transform:uppercase;
+                      letter-spacing:.06em;margin-bottom:8px">Load fields from files</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Source file</div>
+              <div style="display:flex;gap:5px">
+                <input type="text" id="prev-src" placeholder="Path or browse..."
+                       style="flex:1;background:var(--bg);border:1px solid var(--border);
+                              color:var(--text);padding:6px 8px;border-radius:5px;
+                              font-size:11px;outline:none">
+                <button class="fs-btn" style="padding:5px 9px;white-space:nowrap"
+                        onclick="document.getElementById('prev-src-file').click()">Browse</button>
+                <input type="file" id="prev-src-file" accept=".csv,.xlsx,.xls"
+                       onchange="previewFileSelected('src',this)">
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Target file</div>
+              <div style="display:flex;gap:5px">
+                <input type="text" id="prev-tgt" placeholder="Path or browse..."
+                       style="flex:1;background:var(--bg);border:1px solid var(--border);
+                              color:var(--text);padding:6px 8px;border-radius:5px;
+                              font-size:11px;outline:none">
+                <button class="fs-btn" style="padding:5px 9px;white-space:nowrap"
+                        onclick="document.getElementById('prev-tgt-file').click()">Browse</button>
+                <input type="file" id="prev-tgt-file" accept=".csv,.xlsx,.xls"
+                       onchange="previewFileSelected('tgt',this)">
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <button class="save-btn" style="font-size:11px;padding:6px 13px"
+                    onclick="loadFieldsFromFiles()">&#128269; Load fields</button>
+            <span id="prev-status" style="font-size:11px;color:var(--muted)"></span>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <input type="text" id="fs-search"
+               placeholder="Search by field name or SAP code..."
+               style="background:var(--surface2);border:1px solid var(--border);
+                      color:var(--text);padding:6px 10px;border-radius:6px;font-size:11px;
+                      width:100%;outline:none;margin-bottom:7px"
+               oninput="filterFieldCheckboxes()">
+
+        <!-- Filter chips -->
+        <div id="fs-filter-bar" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px"></div>
+
         <div class="fs-header">
           <div class="fs-btns">
             <button class="fs-btn" onclick="selectAllFields()">Select all</button>
             <button class="fs-btn" onclick="clearAllFields()">Clear all</button>
+            <button class="fs-btn" onclick="selectAllVisible()">Select visible</button>
+            <button class="fs-btn" onclick="clearAllVisible()">Clear visible</button>
           </div>
           <span class="fs-count" id="fs-count">0 selected</span>
         </div>
-        <div class="fs-grid" id="field-checkboxes">
-          <div style="color:var(--muted);font-size:11px;padding:8px">
-            Run a scan first to see available fields.
+
+        <div class="fs-grid" id="field-checkboxes" style="max-height:240px">
+          <div style="color:var(--muted);font-size:11px;padding:8px;grid-column:1/-1">
+            Load fields from files above, or run a scan first.
           </div>
         </div>
         <button class="save-btn" style="margin-top:10px" onclick="saveFieldSelection()">Apply Selection</button>
@@ -469,11 +540,11 @@ function renderSidebar(status){
     else if(st==='error')     pill='<span class="sp sp-err">Error</span>';
     else{
       var r=allResults[pair.name], s=r?r.status:'';
-      if(s==='PASS')           pill='<span class="sp sp-pass">PASS</span>';
-      else if(s==='WARNING')   pill='<span class="sp sp-warn">WARNING</span>';
-      else if(s==='FAIL')      pill='<span class="sp sp-fail">FAIL</span>';
-      else if(s==='ERROR')     pill='<span class="sp sp-err">ERROR</span>';
-      else                     pill='<span class="sp sp-new">&hellip;</span>';
+      if(s==='PASS')         pill='<span class="sp sp-pass">PASS</span>';
+      else if(s==='WARNING') pill='<span class="sp sp-warn">WARNING</span>';
+      else if(s==='FAIL')    pill='<span class="sp sp-fail">FAIL</span>';
+      else if(s==='ERROR')   pill='<span class="sp sp-err">ERROR</span>';
+      else                   pill='<span class="sp sp-new">&hellip;</span>';
     }
     var act=activeTable===pair.name?'active':'';
     html+='<div class="sb-item '+act+'" onclick="selectTable(\''+pair.name+'\',this)">'+
@@ -495,7 +566,7 @@ function selectTable(name,el){
   document.getElementById('detail').style.display='block';
   document.getElementById('detail').innerHTML=
     '<div class="banner bn-val"><span class="spinner"></span>'+
-    '<span><b>'+name+'</b> — detected, waiting for validation&hellip;</span></div>';
+    '<span><b>'+name+'</b> \u2014 detected, waiting for validation\u2026</span></div>';
 }
 
 function renderValPlaceholder(name,fs){
@@ -503,7 +574,7 @@ function renderValPlaceholder(name,fs){
   document.getElementById('detail').style.display='block';
   document.getElementById('detail').innerHTML=
     '<div class="banner bn-val"><span class="spinner"></span>'+
-    '<span><b>'+name+'</b> validating now&hellip; '+
+    '<span><b>'+name+'</b> validating now\u2026 '+
     (fs.source_file?'('+fs.source_file+' &harr; '+fs.target_file+')':'')+
     '</span></div>'+
     '<div style="color:var(--muted);font-size:12px;padding:14px 0">Results will appear automatically.</div>';
@@ -513,18 +584,14 @@ function renderDetail(r){
   document.getElementById('welcome').style.display='none';
   var det=document.getElementById('detail');
   det.style.display='block';
-  var pc =
-    r.status === 'PASS' ? 'pill-pass' :
-    r.status === 'WARNING' ? 'pill-warn' :
-    r.status === 'ERROR' ? 'pill-err' :
-    'pill-fail';
+  var pc=r.status==='PASS'?'pill-pass':r.status==='WARNING'?'pill-warn':r.status==='ERROR'?'pill-err':'pill-fail';
   var fs=allStates[r.name]||{};
   var thr=r.pass_threshold||100;
   var sel=r.selected_fields||[];
 
   var banner='';
   if(fs.state==='changed')
-    banner='<div class="banner bn-chg">&#9888; File changed — re-validation queued.</div>';
+    banner='<div class="banner bn-chg">&#9888; File changed \u2014 re-validation queued.</div>';
 
   var dlBtn=r.excel_file
     ?'<a class="dl-btn" href="/api/download/'+r.name+'" download="'+r.excel_file+'">&#8595; Excel</a>'
@@ -533,13 +600,10 @@ function renderDetail(r){
   var err=r.errors&&r.errors.length
     ?'<div class="err-box">&#10060; '+r.errors.join('<br>')+'</div>':'';
 
-  var businessMsg = r.business_message
-    ? '<div class="banner ' + (r.status === 'WARNING' ? 'bn-chg' : 'bn-val') + '">' +
-      esc(r.business_message) +
-      '</div>'
-    : '';
+  var businessMsg=r.business_message
+    ?'<div class="banner '+(r.status==='WARNING'?'bn-chg':'bn-val')+'">'+esc(r.business_message)+'</div>'
+    :'';
 
-  // Threshold info bar
   var thrInfo='<div class="thr-info">&#9989; Pass threshold: <b>'+thr+'%</b>'
     +(sel.length?' &nbsp;|&nbsp; Validating <b>'+sel.length+'</b> selected fields':' &nbsp;|&nbsp; All fields')
     +'</div>';
@@ -553,7 +617,7 @@ function renderDetail(r){
     card(t,'Target only',t?'warn':'')+
     card(r.fields_passed,'Fields passed','ok')+
     card(r.fields_failed,'Fields failed',r.fields_failed?'warn':'ok')+
-    card(r.pass_rate_pct+'%','Pass rate','')+
+    card(r.pass_rate_pct+'%','Pass rate','blue')+
     '</div>';
 
   var mapHtml='';
@@ -596,14 +660,14 @@ function renderDetail(r){
       return '<tr><td>'+m.material+'</td>'+
              '<td class="dold">'+esc(String(m.source_value))+'</td>'+
              '<td class="dnew">'+esc(String(m.target_value))+'</td>'+
-             '<td style="color:var(--muted)">'+esc(m.issue)+'</td></tr>'
+             '<td style="color:var(--muted)">'+esc(m.issue)+'</td></tr>';
     }).join(''):'';
     var detRow=hasMiss?'<tr class="miss-row" id="md-'+i+'"><td colspan="8">'+
       '<div class="miss-inner"><table>'+
       '<thead><tr><th>Key</th><th>Source value</th><th>Target value</th><th>Issue</th></tr></thead>'+
       '<tbody>'+missRows+'</tbody></table></div></td></tr>':'';
     var thrPct='<span style="font-size:10px;color:var(--muted)">&ge;'+fthr+'%</span>';
-    return '<tr class="'+(hasMiss?'':'')+(hasMiss?'" style="cursor:pointer" onclick="toggleRow('+i+')"':'"')+'">'+
+    return '<tr'+(hasMiss?' style="cursor:pointer" onclick="toggleRow('+i+')"':'')+'>'+
       '<td>'+expIcon+'<span class="fl">'+lbl+'</span>'+tech+'</td>'+
       '<td>'+typeTag+'</td>'+
       '<td>'+fr.total+'</td>'+
@@ -668,7 +732,7 @@ async function uploadLabels(input){
   var fd=new FormData(); fd.append('file',input.files[0]);
   var res=await fetch('/api/upload/labels',{method:'POST',body:fd});
   var data=await res.json();
-  if(data.ok){st.style.color='var(--pass)';st.textContent='Labels applied — re-validating\u2026';toast('Custom labels applied','info');setTimeout(refresh,1000)}
+  if(data.ok){st.style.color='var(--pass)';st.textContent='Labels applied \u2014 re-validating\u2026';toast('Custom labels applied','info');setTimeout(refresh,1000)}
   else{st.style.color='var(--fail)';st.textContent=data.error}
   input.value='';
 }
@@ -691,7 +755,7 @@ async function openLog(){
 async function openReports(){
   document.getElementById('rep-modal').classList.add('open');
   var list=document.getElementById('rep-list');
-  list.innerHTML='<div class="empty-msg">Loading&hellip;</div>';
+  list.innerHTML='<div class="empty-msg">Loading\u2026</div>';
   var reports=await fetch('/api/reports').then(function(r){return r.json()});
   if(!reports.length){list.innerHTML='<div class="empty-msg">No reports yet. Run a scan first.</div>';return}
   list.innerHTML=reports.map(function(rep){
@@ -716,22 +780,170 @@ async function openSettings(){
     cfg.labels_file_exists?'Custom labels loaded: '+cfg.labels_file
     :'Using built-in SAP field dictionary.';
 
-  // Load field checkboxes
   var avail=cfg.available_fields||[], sel=cfg.selected_fields||[];
-  var grid=document.getElementById('field-checkboxes');
-  if(!avail.length){
-    grid.innerHTML='<div style="color:var(--muted);font-size:11px;padding:8px">Run a scan first to see available fields.</div>';
+  if(avail.length){
+    var enriched=avail.map(function(f){
+      return {field:f.field, label:f.label,
+              in_source:true, in_target:true, common:true,
+              selected: sel.length===0||sel.indexOf(f.field)>=0};
+    });
+    renderFieldCheckboxes(enriched, {common:enriched.length, src_only:0, tgt_only:0});
   } else {
-    grid.innerHTML=avail.map(function(f){
-      var checked=sel.length===0||sel.indexOf(f.field)>=0;
-      var lbl=f.label&&f.label!==f.field?f.label:f.field;
-      var tech=f.label&&f.label!==f.field?'<div class="fc-tech">'+f.field+'</div>':'';
-      return '<label class="fc-item">'+
-             '<input type="checkbox" value="'+f.field+'"'+(checked?' checked':'')+' onchange="updateFsCount()">'+
-             '<span><div class="fc-label">'+lbl+'</div>'+tech+'</span></label>';
-    }).join('');
-    updateFsCount();
+    document.getElementById('field-checkboxes').innerHTML=
+      '<div style="color:var(--muted);font-size:11px;padding:8px;grid-column:1/-1">'+
+      'Load fields from files above, or run a scan first.</div>';
+    document.getElementById('fs-filter-bar').innerHTML='';
   }
+}
+
+/* Field preview from files */
+var previewedFiles={src:null, tgt:null};
+
+function previewFileSelected(side,input){
+  if(!input.files||!input.files.length) return;
+  previewedFiles[side]=input.files[0];
+  document.getElementById('prev-'+side).value=input.files[0].name;
+  input.value='';
+}
+
+async function loadFieldsFromFiles(){
+  var st=document.getElementById('prev-status');
+  var srcInput=document.getElementById('prev-src').value.trim();
+  var tgtInput=document.getElementById('prev-tgt').value.trim();
+
+  if(!srcInput&&!tgtInput){
+    st.style.color='var(--fail)';
+    st.textContent='Enter at least one file path or browse to select.';
+    return;
+  }
+
+  st.style.color='var(--muted)'; st.textContent='Reading headers\u2026';
+  var srcPath=srcInput, tgtPath=tgtInput;
+
+  try{
+    if(previewedFiles.src){
+      var fd=new FormData(); fd.append('file',previewedFiles.src);
+      var res=await fetch('/api/upload/source',{method:'POST',body:fd});
+      var data=await res.json();
+      if(data.ok){
+        var cfg=await fetch('/api/config').then(function(r){return r.json()});
+        srcPath=cfg.source_dir+'/'+previewedFiles.src.name;
+      }
+    }
+    if(previewedFiles.tgt){
+      var fd2=new FormData(); fd2.append('file',previewedFiles.tgt);
+      var res2=await fetch('/api/upload/target',{method:'POST',body:fd2});
+      var data2=await res2.json();
+      if(data2.ok){
+        var cfg2=await fetch('/api/config').then(function(r){return r.json()});
+        tgtPath=cfg2.target_dir+'/'+previewedFiles.tgt.name;
+      }
+    }
+  }catch(e){}
+
+  try{
+    var res3=await fetch('/api/fields/preview',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({source_path:srcPath,target_path:tgtPath})
+    });
+    var d=await res3.json();
+    if(d.errors&&Object.keys(d.errors).length){
+      st.style.color='var(--fail)';
+      st.textContent=Object.values(d.errors).join(' | ');
+      return;
+    }
+    renderFieldCheckboxes(d.fields,d);
+    st.style.color='var(--pass)';
+    st.textContent=d.common+' common fields loaded'
+      +(d.src_only?', '+d.src_only+' source-only':'')
+      +(d.tgt_only?', '+d.tgt_only+' target-only':'')
+      +'. Tick the fields you want to validate.';
+  }catch(e){
+    st.style.color='var(--fail)'; st.textContent='Failed: '+e;
+  }
+}
+
+function renderFieldCheckboxes(fields,summary){
+  var grid=document.getElementById('field-checkboxes');
+  var bar=document.getElementById('fs-filter-bar');
+
+  bar.innerHTML=
+    '<button class="fs-btn" style="border-radius:12px;padding:2px 10px;background:var(--accent2);border-color:var(--accent2);color:#fff" '+
+    'onclick="setFsFilter(this,\'all\')">All ('+fields.length+')</button>'+
+    (summary&&summary.common?
+      '<button class="fs-btn" style="border-radius:12px;padding:2px 10px" '+
+      'onclick="setFsFilter(this,\'common\')">Common ('+summary.common+')</button>':'')+
+    (summary&&summary.src_only?
+      '<button class="fs-btn" style="border-radius:12px;padding:2px 10px;color:var(--warn)" '+
+      'onclick="setFsFilter(this,\'src_only\')">Source only ('+summary.src_only+')</button>':'')+
+    (summary&&summary.tgt_only?
+      '<button class="fs-btn" style="border-radius:12px;padding:2px 10px;color:var(--info)" '+
+      'onclick="setFsFilter(this,\'tgt_only\')">Target only ('+summary.tgt_only+')</button>':'');
+
+  if(!fields||!fields.length){
+    grid.innerHTML='<div style="color:var(--muted);font-size:11px;padding:8px;grid-column:1/-1">No fields found.</div>';
+    return;
+  }
+
+  grid.innerHTML=fields.map(function(f){
+    var lbl=f.label&&f.label!==f.field?f.label:f.field;
+    var tech=f.label&&f.label!==f.field?'<div class="fc-tech">'+f.field+'</div>':'';
+    var canSelect=f.common!==false;
+    var disabled=canSelect?'':' disabled';
+    var opacity=canSelect?'':'opacity:.45;';
+    var title=canSelect?'':(f.in_source?'Source only \u2014 not in target':'Target only \u2014 not in source');
+    var sc=f.in_source?'<span style="font-size:9px;background:rgba(34,197,94,.15);color:var(--pass);padding:1px 5px;border-radius:3px;margin-left:3px">S</span>':'';
+    var tc=f.in_target?'<span style="font-size:9px;background:rgba(59,130,246,.15);color:var(--info);padding:1px 5px;border-radius:3px;margin-left:2px">T</span>':'';
+    var role=f.common?'common':(f.in_source?'src_only':'tgt_only');
+    return '<label class="fc-item" style="'+opacity+'" title="'+title+'"'+
+      ' data-field="'+f.field.toLowerCase()+'"'+
+      ' data-label="'+lbl.toLowerCase()+'"'+
+      ' data-role="'+role+'">'+
+      '<input type="checkbox" value="'+f.field+'"'+(f.selected?' checked':'')+disabled+
+      ' onchange="updateFsCount()">'+
+      '<span><div class="fc-label">'+lbl+sc+tc+'</div>'+tech+'</span></label>';
+  }).join('');
+
+  updateFsCount();
+}
+
+var currentFsFilter='all';
+function setFsFilter(btn,filter){
+  document.querySelectorAll('#fs-filter-bar .fs-btn').forEach(function(b){
+    b.style.background='transparent';
+    b.style.borderColor='var(--border)';
+    b.style.color='var(--muted)';
+  });
+  btn.style.background='var(--accent2)';
+  btn.style.borderColor='var(--accent2)';
+  btn.style.color='#fff';
+  currentFsFilter=filter;
+  filterFieldCheckboxes();
+}
+
+function filterFieldCheckboxes(){
+  var q=(document.getElementById('fs-search')||{value:''}).value.toLowerCase();
+  document.querySelectorAll('#field-checkboxes .fc-item').forEach(function(item){
+    var field=item.dataset.field||'';
+    var label=item.dataset.label||'';
+    var role=item.dataset.role||'';
+    var mf=currentFsFilter==='all'
+      ||(currentFsFilter==='common'&&role==='common')
+      ||(currentFsFilter==='src_only'&&role==='src_only')
+      ||(currentFsFilter==='tgt_only'&&role==='tgt_only');
+    var ms=!q||field.includes(q)||label.includes(q);
+    item.style.display=(mf&&ms)?'':'none';
+  });
+}
+
+function selectAllVisible(){
+  document.querySelectorAll('#field-checkboxes .fc-item:not([style*="display: none"]) input:not(:disabled)').forEach(function(cb){cb.checked=true});
+  updateFsCount();
+}
+function clearAllVisible(){
+  document.querySelectorAll('#field-checkboxes .fc-item:not([style*="display: none"]) input:not(:disabled)').forEach(function(cb){cb.checked=false});
+  updateFsCount();
 }
 
 function updateThrDisplay(){
@@ -740,17 +952,17 @@ function updateThrDisplay(){
 
 function updateFsCount(){
   var checked=document.querySelectorAll('#field-checkboxes input:checked').length;
-  var total=document.querySelectorAll('#field-checkboxes input').length;
+  var total=document.querySelectorAll('#field-checkboxes input:not(:disabled)').length;
   document.getElementById('fs-count').textContent=
-    checked===total?'All fields ('+total+')':checked+' of '+total+' selected';
+    checked===total&&total>0?'All fields ('+total+')':checked+' of '+total+' selected';
 }
 
 function selectAllFields(){
-  document.querySelectorAll('#field-checkboxes input').forEach(function(cb){cb.checked=true});
+  document.querySelectorAll('#field-checkboxes input:not(:disabled)').forEach(function(cb){cb.checked=true});
   updateFsCount();
 }
 function clearAllFields(){
-  document.querySelectorAll('#field-checkboxes input').forEach(function(cb){cb.checked=false});
+  document.querySelectorAll('#field-checkboxes input:not(:disabled)').forEach(function(cb){cb.checked=false});
   updateFsCount();
 }
 
@@ -772,18 +984,17 @@ async function saveThreshold(){
   var data=await res.json();
   if(data.ok){
     st.style.color='var(--pass)';
-    st.textContent='Threshold set to '+thr+'% \u2014 re-validating all tables\u2026';
+    st.textContent='Threshold set to '+thr+'% \u2014 re-validating\u2026';
     document.getElementById('thr-badge').textContent='Threshold: '+thr+'%';
     toast('Pass threshold set to '+thr+'%','info'); setTimeout(refresh,800);
   }else{st.style.color='var(--fail)';st.textContent='Failed'}
 }
 
 async function saveFieldSelection(){
-  var checkboxes=document.querySelectorAll('#field-checkboxes input');
+  var checkboxes=document.querySelectorAll('#field-checkboxes input:not(:disabled)');
   var total=checkboxes.length;
   var selected=[];
   checkboxes.forEach(function(cb){if(cb.checked) selected.push(cb.value)});
-  // If all selected treat as "all fields" (empty = all)
   var toSave=selected.length===total?[]:selected;
   var st=document.getElementById('field-st'); st.textContent='Applying\u2026';
   var res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -791,7 +1002,7 @@ async function saveFieldSelection(){
   var data=await res.json();
   if(data.ok){
     st.style.color='var(--pass)';
-    var msg=toSave.length?toSave.length+' fields selected \u2014 re-validating\u2026':'All fields selected \u2014 re-validating\u2026';
+    var msg=toSave.length?toSave.length+' fields selected \u2014 re-validating\u2026':'All fields \u2014 re-validating\u2026';
     st.textContent=msg; toast(msg.split(' \u2014')[0],'info'); setTimeout(refresh,800);
   }else{st.style.color='var(--fail)';st.textContent='Failed'}
 }
@@ -805,7 +1016,7 @@ function closeModal(id){document.getElementById(id).classList.remove('open')}
 });
 
 function card(val,lbl,cls){
-  return '<div class="card '+cls+'"><div class="n">'+val+'</div><div class="l">'+lbl+'</div></div>'
+  return '<div class="card '+cls+'"><div class="n">'+val+'</div><div class="l">'+lbl+'</div></div>';
 }
 function fmt(n){return Number(n).toLocaleString()}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
