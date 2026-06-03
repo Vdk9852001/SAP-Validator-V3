@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
     "source_dir": str(BASE_DIR / "data" / "source"),
     "target_dir": str(BASE_DIR / "data" / "target"),
     "pass_threshold": 100.0,
-    "selected_fields": [],  # empty = all fields
+    "selected_fields": [],
 }
 
 results_store = {}
@@ -52,7 +52,6 @@ activity_log = []
 
 SUPPORTED_EXT = {".csv", ".xlsx", ".xls"}
 
-# Prevent duplicate scans from running at the same time
 scan_lock = threading.Lock()
 
 
@@ -62,7 +61,6 @@ def load_config():
             return {**DEFAULT_CONFIG, **json.loads(CONFIG_FILE.read_text())}
         except Exception as e:
             print(f"Config load failed: {e}")
-
     return dict(DEFAULT_CONFIG)
 
 
@@ -72,13 +70,10 @@ def save_config(cfg):
 
 def get_dirs():
     cfg = load_config()
-
     src = Path(cfg.get("source_dir", DEFAULT_CONFIG["source_dir"]))
     tgt = Path(cfg.get("target_dir", DEFAULT_CONFIG["target_dir"]))
-
     src.mkdir(parents=True, exist_ok=True)
     tgt.mkdir(parents=True, exist_ok=True)
-
     return src, tgt
 
 
@@ -88,26 +83,18 @@ def log_event(message, level="info"):
         "message": message,
         "level": level,
     }
-
     activity_log.append(entry)
-
     if len(activity_log) > 50:
         activity_log.pop(0)
-
     print(f"  [{entry['ts']}] {message}")
 
 
 def cleanup_old_reports(keep_latest=20):
-    """
-    Keeps only the latest reports to avoid reports folder growing forever.
-    """
-
     files = sorted(
         REPORTS_DIR.glob("*.xlsx"),
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     )
-
     for old_file in files[keep_latest:]:
         try:
             old_file.unlink()
@@ -123,7 +110,6 @@ def discover_pairs():
         for f in SOURCE_DIR.iterdir()
         if f.suffix.lower() in SUPPORTED_EXT
     }
-
     tgt_files = {
         f.stem.upper(): f
         for f in TARGET_DIR.iterdir()
@@ -131,53 +117,26 @@ def discover_pairs():
     }
 
     pairs = []
-
     for name in sorted(set(src_files) | set(tgt_files)):
         sp = str(src_files[name]) if name in src_files else None
         tp = str(tgt_files[name]) if name in tgt_files else None
-
         has_pair = name in src_files and name in tgt_files
-
-        if has_pair:
-            mtime = max(Path(sp).stat().st_mtime, Path(tp).stat().st_mtime)
-        else:
-            mtime = None
-
-        pairs.append(
-            {
-                "name": name,
-                "source_path": sp,
-                "target_path": tp,
-                "has_pair": has_pair,
-                "mtime": mtime,
-                "source_file": Path(sp).name if sp else None,
-                "target_file": Path(tp).name if tp else None,
-            }
-        )
-
+        mtime = max(Path(sp).stat().st_mtime, Path(tp).stat().st_mtime) if has_pair else None
+        pairs.append({
+            "name": name,
+            "source_path": sp,
+            "target_path": tp,
+            "has_pair": has_pair,
+            "mtime": mtime,
+            "source_file": Path(sp).name if sp else None,
+            "target_file": Path(tp).name if tp else None,
+        })
     return pairs
 
 
 def calculate_business_status(result, pass_threshold):
-    """
-    Strong SAP validation status logic.
-
-    PASS:
-        Field pass rate >= threshold
-        No records missing in source
-        No records missing in target
-
-    WARNING:
-        Field pass rate >= threshold
-        But source/target record counts do not reconcile
-
-    FAIL:
-        Field pass rate < threshold
-    """
-
     ss = result.summary_stats
     pass_rate = float(ss.get("pass_rate_pct", 0))
-
     records_only_in_source = int(result.records_only_in_source or 0)
     records_only_in_target = int(result.records_only_in_target or 0)
 
@@ -208,7 +167,6 @@ def calculate_business_status(result, pass_threshold):
                 f"Source has {records_only_in_source:,} records "
                 f"not found in target."
             )
-
         return {
             "status": "WARNING",
             "field_status": "PASS",
@@ -232,7 +190,6 @@ def calculate_business_status(result, pass_threshold):
 
 def run_validation(name, source_path, target_path):
     cfg = load_config()
-
     pass_threshold = float(cfg.get("pass_threshold", 100.0))
     selected_fields = cfg.get("selected_fields", [])
     custom_labels = str(LABELS_FILE) if LABELS_FILE.exists() else None
@@ -245,45 +202,36 @@ def run_validation(name, source_path, target_path):
 
     result = validator.validate(source_path, target_path)
     ss = result.summary_stats
-
     business_status = calculate_business_status(result, pass_threshold)
 
     field_rows = []
-
     for fr in result.field_results:
-        field_rows.append(
-            {
-                "field": fr.field_source,
-                "field_label": fr.field_label,
-                "field_target": fr.field_target,
-                "type": "numeric" if fr.is_numeric else "string",
-                "tolerance": fr.tolerance_used,
-                "total": fr.total_records,
-                "matched": fr.matched,
-                "mismatched": fr.mismatched,
-                "miss_source": fr.missing_in_source,
-                "miss_target": fr.missing_in_target,
-                "match_pct": fr.match_pct,
-                "pass_threshold": fr.pass_threshold,
-                "status": fr.status,
-                "mismatches": fr.mismatch_details[:50],
-            }
-        )
+        field_rows.append({
+            "field": fr.field_source,
+            "field_label": fr.field_label,
+            "field_target": fr.field_target,
+            "type": "numeric" if fr.is_numeric else "string",
+            "tolerance": fr.tolerance_used,
+            "total": fr.total_records,
+            "matched": fr.matched,
+            "mismatched": fr.mismatched,
+            "miss_source": fr.missing_in_source,
+            "miss_target": fr.missing_in_target,
+            "match_pct": fr.match_pct,
+            "pass_threshold": fr.pass_threshold,
+            "status": fr.status,
+            "mismatches": fr.mismatch_details[:50],
+        })
 
     mapping = None
-
     if result.mapping:
         from core.field_labels import get_label, load_custom_labels
-
         custom = load_custom_labels(str(LABELS_FILE)) if LABELS_FILE.exists() else {}
-
         mapping = {
             "join_key": result.mapping.join_key,
             "join_key_label": result.mapping.join_key_label,
             "matched_fields": result.mapping.matched_fields,
-            "matched_labels": {
-                f: get_label(f, custom) for f in result.mapping.matched_fields
-            },
+            "matched_labels": {f: get_label(f, custom) for f in result.mapping.matched_fields},
             "source_only_fields": result.mapping.source_only_fields,
             "target_only_fields": result.mapping.target_only_fields,
             "numeric_fields": result.mapping.numeric_fields,
@@ -298,34 +246,24 @@ def run_validation(name, source_path, target_path):
 
     result_dict = {
         "name": name,
-
-        # Stronger business result
         "status": business_status["status"],
         "validator_status": result.overall_status,
         "field_status": business_status["field_status"],
         "record_status": business_status["record_status"],
         "business_message": business_status["message"],
-
-        # File details
         "source_file": Path(source_path).name,
         "target_file": Path(target_path).name,
-
-        # Record reconciliation
         "total_source_records": result.total_source_records,
         "total_target_records": result.total_target_records,
         "records_matched": result.records_matched,
         "records_only_in_source": result.records_only_in_source,
         "records_only_in_target": result.records_only_in_target,
-
-        # Field summary
         "fields_passed": ss["fields_passed"],
         "fields_failed": ss["fields_failed"],
         "total_fields": ss["total_fields_validated"],
         "pass_rate_pct": ss["pass_rate_pct"],
         "pass_threshold": pass_threshold,
         "selected_fields": selected_fields,
-
-        # Extra details
         "errors": result.errors,
         "mapping": mapping,
         "field_results": field_rows,
@@ -344,11 +282,6 @@ def run_validation(name, source_path, target_path):
 
 
 def scan_and_validate_all():
-    """
-    Scans source and target folders and validates matching file pairs.
-    scan_lock prevents duplicate scans from running at the same time.
-    """
-
     if not scan_lock.acquire(blocking=False):
         log_event("Scan already running — skipping duplicate scan", "warn")
         return
@@ -362,7 +295,6 @@ def scan_and_validate_all():
     try:
         pairs = discover_pairs()
         valid_pairs = [p for p in pairs if p["has_pair"]]
-
         scan_status["total_files"] = len(valid_pairs)
 
         for pair in pairs:
@@ -370,23 +302,19 @@ def scan_and_validate_all():
 
             if not pair["has_pair"]:
                 prev = file_states.get(name, {})
-
                 if prev.get("state") != "unmatched":
                     side = "source" if pair["source_path"] else "target"
                     other = "target" if side == "source" else "source"
-
                     log_event(
                         f"{name}: found in {side} only — waiting for {other} file",
                         "warn",
                     )
-
                     file_states[name] = {
                         "state": "unmatched",
                         "detected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "source_file": pair["source_file"],
                         "target_file": pair["target_file"],
                     }
-
                 continue
 
             last_mtime = pair["mtime"]
@@ -395,8 +323,7 @@ def scan_and_validate_all():
 
             if not existing:
                 log_event(
-                    f"{name}: new file pair — "
-                    f"{pair['source_file']} + {pair['target_file']}",
+                    f"{name}: new file pair — {pair['source_file']} + {pair['target_file']}",
                     "info",
                 )
             elif prev_state.get("_mtime") != last_mtime:
@@ -406,7 +333,6 @@ def scan_and_validate_all():
                 continue
 
             scan_status["current_file"] = name
-
             file_states[name] = {
                 "state": "validating",
                 "detected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -416,12 +342,7 @@ def scan_and_validate_all():
             }
 
             try:
-                result = run_validation(
-                    name,
-                    pair["source_path"],
-                    pair["target_path"],
-                )
-
+                result = run_validation(name, pair["source_path"], pair["target_path"])
                 result["_mtime"] = last_mtime
                 results_store[name] = result
 
@@ -476,11 +397,6 @@ def scan_and_validate_all():
 
 
 def background_watcher(interval=60):
-    """
-    Optional automatic watcher.
-    Keep disabled while testing.
-    """
-
     while True:
         scan_and_validate_all()
         time.sleep(interval)
@@ -502,31 +418,25 @@ def api_status():
     pairs = discover_pairs()
     cfg = load_config()
     source_dir, target_dir = get_dirs()
-
     selected_fields = cfg.get("selected_fields", [])
 
-    return jsonify(
-        {
-            "last_scan": scan_status["last_scan"],
-            "scanning": scan_status["scanning"],
-            "error": scan_status["error"],
-            "current_file": scan_status["current_file"],
-            "total_files": scan_status["total_files"],
-            "completed_files": scan_status["completed_files"],
-
-            "source_dir": str(source_dir),
-            "target_dir": str(target_dir),
-            "pairs": pairs,
-            "file_states": file_states,
-
-            "total_tables": len([p for p in pairs if p["has_pair"]]),
-            "unmatched": len([p for p in pairs if not p["has_pair"]]),
-
-            "pass_threshold": cfg.get("pass_threshold", 100.0),
-            "selected_fields": selected_fields,
-            "validation_mode": "all_fields" if not selected_fields else "selected_fields",
-        }
-    )
+    return jsonify({
+        "last_scan": scan_status["last_scan"],
+        "scanning": scan_status["scanning"],
+        "error": scan_status["error"],
+        "current_file": scan_status["current_file"],
+        "total_files": scan_status["total_files"],
+        "completed_files": scan_status["completed_files"],
+        "source_dir": str(source_dir),
+        "target_dir": str(target_dir),
+        "pairs": pairs,
+        "file_states": file_states,
+        "total_tables": len([p for p in pairs if p["has_pair"]]),
+        "unmatched": len([p for p in pairs if not p["has_pair"]]),
+        "pass_threshold": cfg.get("pass_threshold", 100.0),
+        "selected_fields": selected_fields,
+        "validation_mode": "all_fields" if not selected_fields else "selected_fields",
+    })
 
 
 @app.route("/api/results")
@@ -537,10 +447,8 @@ def api_results():
 @app.route("/api/results/<name>")
 def api_result_detail(name):
     r = results_store.get(name.upper())
-
     if r:
         return jsonify(r)
-
     return jsonify({"error": "Not found"}), 404
 
 
@@ -563,83 +471,58 @@ def upload_target():
 def upload_labels():
     if "file" not in request.files:
         return jsonify({"error": "No file"}), 400
-
     f = request.files["file"]
-
     if not f.filename:
         return jsonify({"error": "No filename"}), 400
-
     safe_name = secure_filename(f.filename)
     f.save(str(LABELS_FILE))
-
     log_event(f"Custom labels uploaded: {safe_name}", "info")
-
     results_store.clear()
-
     for n in file_states:
         if file_states[n].get("state") == "done":
             file_states[n]["state"] = "changed"
-
     threading.Thread(target=scan_and_validate_all, daemon=True).start()
-
     return jsonify({"ok": True, "filename": safe_name})
 
 
 def _handle_upload(req, dest_dir, side):
     if "file" not in req.files:
         return jsonify({"error": "No file"}), 400
-
     saved = []
-
     for f in req.files.getlist("file"):
         if not f.filename:
             continue
-
         safe_name = secure_filename(f.filename)
         suffix = Path(safe_name).suffix.lower()
-
         if suffix not in SUPPORTED_EXT:
             return jsonify({"error": f"Unsupported: {safe_name}"}), 400
-
         f.save(str(dest_dir / safe_name))
-
         log_event(f"Uploaded to {side}: {safe_name}", "info")
         saved.append(safe_name)
-
     if saved:
         threading.Thread(target=scan_and_validate_all, daemon=True).start()
-
     return jsonify({"ok": True, "saved": saved})
 
 
 @app.route("/api/config", methods=["GET"])
 def api_get_config():
     cfg = load_config()
-
     available = []
-
     if results_store:
         first = next(iter(results_store.values()))
-
         available = [
-            {
-                "field": fr["field"],
-                "label": fr.get("field_label", fr["field"]),
-            }
+            {"field": fr["field"], "label": fr.get("field_label", fr["field"])}
             for fr in first.get("field_results", [])
         ]
-
-    return jsonify(
-        {
-            "source_dir": cfg.get("source_dir", DEFAULT_CONFIG["source_dir"]),
-            "target_dir": cfg.get("target_dir", DEFAULT_CONFIG["target_dir"]),
-            "pass_threshold": cfg.get("pass_threshold", 100.0),
-            "selected_fields": cfg.get("selected_fields", []),
-            "available_fields": available,
-            "labels_file_exists": LABELS_FILE.exists(),
-            "labels_file": str(LABELS_FILE) if LABELS_FILE.exists() else None,
-        }
-    )
+    return jsonify({
+        "source_dir": cfg.get("source_dir", DEFAULT_CONFIG["source_dir"]),
+        "target_dir": cfg.get("target_dir", DEFAULT_CONFIG["target_dir"]),
+        "pass_threshold": cfg.get("pass_threshold", 100.0),
+        "selected_fields": cfg.get("selected_fields", []),
+        "available_fields": available,
+        "labels_file_exists": LABELS_FILE.exists(),
+        "labels_file": str(LABELS_FILE) if LABELS_FILE.exists() else None,
+    })
 
 
 @app.route("/api/config", methods=["POST"])
@@ -651,30 +534,22 @@ def api_set_config():
     for key in ("source_dir", "target_dir"):
         if key in data and str(data[key]).strip():
             new_path = str(Path(str(data[key]).strip()))
-
             if new_path != cfg.get(key):
                 cfg[key] = new_path
                 changed = True
 
     if "pass_threshold" in data:
         thr = float(data["pass_threshold"])
-
         if thr != cfg.get("pass_threshold"):
             cfg["pass_threshold"] = thr
             changed = True
             log_event(f"Pass threshold updated to {thr}%", "info")
 
     if "selected_fields" in data:
-        sel = [
-            str(f).strip().upper()
-            for f in data["selected_fields"]
-            if str(f).strip()
-        ]
-
+        sel = [str(f).strip().upper() for f in data["selected_fields"] if str(f).strip()]
         if sel != cfg.get("selected_fields", []):
             cfg["selected_fields"] = sel
             changed = True
-
             if sel:
                 log_event(f"Field selection updated: {len(sel)} fields", "info")
             else:
@@ -682,48 +557,137 @@ def api_set_config():
 
     if changed:
         save_config(cfg)
-
         results_store.clear()
-
         for n in file_states:
             if file_states[n].get("state") == "done":
                 file_states[n]["state"] = "changed"
-
         threading.Thread(target=scan_and_validate_all, daemon=True).start()
 
     return jsonify({"ok": True, "config": cfg})
 
 
+@app.route("/api/fields/preview", methods=["POST"])
+def api_fields_preview():
+    """
+    Read column headers from a source + target file without running validation.
+    Returns all columns with friendly labels so the user can choose which
+    fields to validate before the scan runs.
+    """
+    data      = request.get_json(force=True)
+    src_path  = data.get("source_path", "").strip()
+    tgt_path  = data.get("target_path", "").strip()
+    src_delim = data.get("source_delimiter", ",")
+    tgt_delim = data.get("target_delimiter", ",")
+
+    from core.field_labels import get_label, load_custom_labels
+    custom = load_custom_labels(str(LABELS_FILE)) if LABELS_FILE.exists() else {}
+
+    def read_headers(path, delim):
+        p = Path(path)
+        if not p.exists():
+            return None, f"File not found: {path}"
+        try:
+            if p.suffix.lower() in (".xlsx", ".xls"):
+                import openpyxl
+                wb = openpyxl.load_workbook(str(p), read_only=True, data_only=True)
+                ws = wb.active
+                cols = [
+                    str(c.value).strip().upper()
+                    for c in next(ws.iter_rows(max_row=1))
+                    if c.value
+                ]
+                wb.close()
+            else:
+                import csv
+                with open(str(p), encoding="utf-8-sig") as f:
+                    reader = csv.reader(f, delimiter=delim)
+                    cols = [c.strip().upper() for c in next(reader)]
+            return cols, None
+        except Exception as e:
+            return None, str(e)
+
+    src_cols, src_err = read_headers(src_path, src_delim) if src_path else ([], None)
+    tgt_cols, tgt_err = read_headers(tgt_path, tgt_delim) if tgt_path else ([], None)
+
+    errors = {}
+    if src_err:
+        errors["source"] = src_err
+    if tgt_err:
+        errors["target"] = tgt_err
+
+    src_set  = set(src_cols or [])
+    tgt_set  = set(tgt_cols or [])
+    common   = sorted(src_set & tgt_set)
+    src_only = sorted(src_set - tgt_set)
+    tgt_only = sorted(tgt_set - src_set)
+
+    cfg          = load_config()
+    selected_set = set(cfg.get("selected_fields", []))
+
+    fields = []
+
+    for col in common:
+        fields.append({
+            "field":     col,
+            "label":     get_label(col, custom),
+            "in_source": True,
+            "in_target": True,
+            "common":    True,
+            "selected":  len(selected_set) == 0 or col in selected_set,
+        })
+
+    for col in src_only:
+        fields.append({
+            "field":     col,
+            "label":     get_label(col, custom),
+            "in_source": True,
+            "in_target": False,
+            "common":    False,
+            "selected":  False,
+        })
+
+    for col in tgt_only:
+        fields.append({
+            "field":     col,
+            "label":     get_label(col, custom),
+            "in_source": False,
+            "in_target": True,
+            "common":    False,
+            "selected":  False,
+        })
+
+    return jsonify({
+        "fields":    fields,
+        "src_count": len(src_cols or []),
+        "tgt_count": len(tgt_cols or []),
+        "common":    len(common),
+        "src_only":  len(src_only),
+        "tgt_only":  len(tgt_only),
+        "errors":    errors,
+    })
+
+
 @app.route("/api/labels/sample")
 def api_labels_sample():
     from core.field_labels import SAP_FIELD_LABELS
-
     lines = ["FIELD_NAME,FRIENDLY_LABEL"]
-
     for k, v in list(SAP_FIELD_LABELS.items())[:20]:
         lines.append(f"{k},{v}")
-
     return Response(
         "\n".join(lines).encode("utf-8"),
         mimetype="text/csv",
-        headers={
-            "Content-Disposition": "attachment; filename=sample_labels.csv"
-        },
+        headers={"Content-Disposition": "attachment; filename=sample_labels.csv"},
     )
 
 
 @app.route("/api/download/<name>")
 def api_download(name):
     r = results_store.get(name.upper())
-
     if not r:
         return jsonify({"error": "Not found"}), 404
-
     path = REPORTS_DIR / r.get("excel_file", "")
-
     if not path.exists():
         return jsonify({"error": "Missing"}), 404
-
     return send_file(
         str(path),
         as_attachment=True,
@@ -735,10 +699,8 @@ def api_download(name):
 @app.route("/api/download-file/<filename>")
 def api_download_file(filename):
     path = REPORTS_DIR / filename
-
     if not path.exists() or not filename.endswith(".xlsx"):
         return jsonify({"error": "Not found"}), 404
-
     return send_file(
         str(path),
         as_attachment=True,
@@ -754,32 +716,26 @@ def api_reports():
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     )
-
-    return jsonify(
-        [
-            {
-                "filename": f.name,
-                "size_kb": round(f.stat().st_size / 1024, 1),
-                "modified": datetime.fromtimestamp(f.stat().st_mtime).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-            }
-            for f in files
-        ]
-    )
+    return jsonify([
+        {
+            "filename": f.name,
+            "size_kb": round(f.stat().st_size / 1024, 1),
+            "modified": datetime.fromtimestamp(f.stat().st_mtime).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        }
+        for f in files
+    ])
 
 
 @app.route("/api/folders")
 def api_folders():
     s, t = get_dirs()
-
-    return jsonify(
-        {
-            "source_dir": str(s),
-            "target_dir": str(t),
-            "reports_dir": str(REPORTS_DIR),
-        }
-    )
+    return jsonify({
+        "source_dir": str(s),
+        "target_dir": str(t),
+        "reports_dir": str(REPORTS_DIR),
+    })
 
 
 @app.route("/api/clear-results", methods=["POST"])
@@ -787,16 +743,13 @@ def api_clear_results():
     results_store.clear()
     file_states.clear()
     activity_log.clear()
-
     scan_status["last_scan"] = None
     scan_status["scanning"] = False
     scan_status["error"] = None
     scan_status["current_file"] = None
     scan_status["total_files"] = 0
     scan_status["completed_files"] = 0
-
     log_event("Results cleared manually", "info")
-
     return jsonify({"ok": True})
 
 
@@ -811,11 +764,9 @@ if __name__ == "__main__":
     print(f"  Pass threshold  -> {cfg.get('pass_threshold', 100)}%")
     print("  Open            -> http://localhost:5000\n")
 
-    # One scan at startup
     threading.Thread(target=scan_and_validate_all, daemon=True).start()
 
-    # Keep this disabled while testing.
-    # Enable only if you want automatic scanning every 60 seconds.
+    # Uncomment to enable automatic scanning every 60 seconds:
     # threading.Thread(target=background_watcher, args=(60,), daemon=True).start()
 
     app.run(debug=False, port=5000, use_reloader=False)
