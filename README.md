@@ -5,10 +5,6 @@
 
 ## GETTING STARTED
 
-### Step 1 — Install Python (if not already installed)
-Download from https://www.python.org/downloads/ — version 3.10 or above.
-During install, tick "Add Python to PATH".
-
 ### Step 2 — Extract the zip
 Unzip SAP_Validator.zip to any folder, e.g.:
   C:\SAP_Validator\
