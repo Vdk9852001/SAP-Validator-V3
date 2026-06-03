@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.validator import MaterialValidator
 from core.reporter  import generate_excel_report
+from core.field_labels import get_label, load_custom_labels, SAP_FIELD_LABELS
 
 
 app = Flask(__name__)
@@ -104,6 +105,23 @@ def cleanup_old_reports(keep_latest=20):
             log_event(f"Could not delete old report {old_file.name}: {e}", "warn")
 
 
+def _get_custom_labels():
+    """Load custom labels from file if it exists, else empty dict."""
+    return load_custom_labels(str(LABELS_FILE)) if LABELS_FILE.exists() else {}
+
+
+def resolve_label(field_name: str) -> str:
+    """
+    Resolve a SAP technical field name to its English description.
+    e.g. KUNNR -> Customer Number
+         MATNR -> Material Number
+         KTOKD -> Customer Account Group
+    Uses custom labels first, then built-in SAP dictionary.
+    """
+    custom = _get_custom_labels()
+    return get_label(field_name, custom)
+
+
 # ── File discovery ────────────────────────────────────────────────────────────
 
 def get_available_files():
@@ -120,12 +138,6 @@ def get_available_files():
 
 
 def discover_pairs():
-    """
-    Build pairs from:
-      1. Manual pairs saved in config.json  (user-defined, any name combo)
-      2. Auto-matched pairs by exact filename stem (fallback for convenience)
-    Manual pairs always take priority.
-    """
     SOURCE_DIR, TARGET_DIR = get_dirs()
     cfg          = load_config()
     manual_pairs = cfg.get("manual_pairs", [])
@@ -145,39 +157,30 @@ def discover_pairs():
     used_src = set()
     used_tgt = set()
 
-    # ── Manual pairs first ────────────────────────────────────────────────────
     for mp in manual_pairs:
         src_name = mp.get("source_file", "")
         tgt_name = mp.get("target_file", "")
         name     = mp.get("name", "").upper().strip() or Path(src_name).stem.upper()
-
         sp = str(src_files[src_name]) if src_name in src_files else None
         tp = str(tgt_files[tgt_name]) if tgt_name in tgt_files else None
-
         has_pair = sp is not None and tp is not None
         mtime    = (
             max(Path(sp).stat().st_mtime, Path(tp).stat().st_mtime)
             if has_pair else None
         )
-
         pairs.append({
-            "name":        name,
-            "source_path": sp,
-            "target_path": tp,
-            "has_pair":    has_pair,
-            "mtime":       mtime,
+            "name": name, "source_path": sp, "target_path": tp,
+            "has_pair": has_pair, "mtime": mtime,
             "source_file": Path(sp).name if sp else src_name,
             "target_file": Path(tp).name if tp else tgt_name,
-            "match_type":  "manual",
+            "match_type": "manual",
             "missing": [] if has_pair else (
-                (["source"] if not sp else []) +
-                (["target"] if not tp else [])
+                (["source"] if not sp else []) + (["target"] if not tp else [])
             ),
         })
         if sp: used_src.add(src_name)
         if tp: used_tgt.add(tgt_name)
 
-    # ── Auto pairs: exact filename stem match ─────────────────────────────────
     src_by_stem = {}
     for fname, fpath in src_files.items():
         if fname not in used_src:
@@ -193,52 +196,36 @@ def discover_pairs():
         tgt_fname, tgt_fpath = tgt_by_stem[stem]
         mtime = max(src_fpath.stat().st_mtime, tgt_fpath.stat().st_mtime)
         pairs.append({
-            "name":        stem,
-            "source_path": str(src_fpath),
-            "target_path": str(tgt_fpath),
-            "has_pair":    True,
-            "mtime":       mtime,
-            "source_file": src_fname,
-            "target_file": tgt_fname,
-            "match_type":  "auto",
-            "missing":     [],
+            "name": stem, "source_path": str(src_fpath), "target_path": str(tgt_fpath),
+            "has_pair": True, "mtime": mtime,
+            "source_file": src_fname, "target_file": tgt_fname,
+            "match_type": "auto", "missing": [],
         })
         used_src.add(src_fname)
         used_tgt.add(tgt_fname)
 
-    # ── Unmatched files ───────────────────────────────────────────────────────
     for fname, fpath in src_files.items():
         if fname not in used_src:
             pairs.append({
-                "name":        Path(fname).stem.upper(),
-                "source_path": str(fpath),
-                "target_path": None,
-                "has_pair":    False,
-                "mtime":       None,
-                "source_file": fname,
-                "target_file": None,
-                "match_type":  "unmatched",
-                "missing":     ["target"],
+                "name": Path(fname).stem.upper(), "source_path": str(fpath),
+                "target_path": None, "has_pair": False, "mtime": None,
+                "source_file": fname, "target_file": None,
+                "match_type": "unmatched", "missing": ["target"],
             })
 
     for fname, fpath in tgt_files.items():
         if fname not in used_tgt:
             pairs.append({
-                "name":        Path(fname).stem.upper(),
-                "source_path": None,
-                "target_path": str(fpath),
-                "has_pair":    False,
-                "mtime":       None,
-                "source_file": None,
-                "target_file": fname,
-                "match_type":  "unmatched",
-                "missing":     ["source"],
+                "name": Path(fname).stem.upper(), "source_path": None,
+                "target_path": str(fpath), "has_pair": False, "mtime": None,
+                "source_file": None, "target_file": fname,
+                "match_type": "unmatched", "missing": ["source"],
             })
 
     return pairs
 
 
-# ── Business status logic ─────────────────────────────────────────────────────
+# ── Business status ───────────────────────────────────────────────────────────
 
 def calculate_business_status(result, pass_threshold):
     ss          = result.summary_stats
@@ -248,9 +235,7 @@ def calculate_business_status(result, pass_threshold):
 
     if pass_rate < pass_threshold:
         return {
-            "status":        "FAIL",
-            "field_status":  "FAIL",
-            "record_status": "CHECKED",
+            "status": "FAIL", "field_status": "FAIL", "record_status": "CHECKED",
             "message": (
                 f"Field validation failed. Pass rate is {pass_rate:.2f}% "
                 f"which is below threshold {pass_threshold:.2f}%."
@@ -268,9 +253,7 @@ def calculate_business_status(result, pass_threshold):
         else:
             record_msg = f"Source has {only_source:,} records not found in target."
         return {
-            "status":        "WARNING",
-            "field_status":  "PASS",
-            "record_status": "WARNING",
+            "status": "WARNING", "field_status": "PASS", "record_status": "WARNING",
             "message": (
                 f"Field validation passed with {pass_rate:.2f}% "
                 f"against threshold {pass_threshold:.2f}%, but {record_msg}"
@@ -278,14 +261,91 @@ def calculate_business_status(result, pass_threshold):
         }
 
     return {
-        "status":        "PASS",
-        "field_status":  "PASS",
-        "record_status": "PASS",
+        "status": "PASS", "field_status": "PASS", "record_status": "PASS",
         "message": (
             f"Validation passed. Field pass rate is {pass_rate:.2f}% "
             f"and source/target records are fully reconciled."
         ),
     }
+
+
+# ── Core: get fields for a table (used by dashboard field selector) ────────────
+
+def get_fields_for_object(name: str, source_path: str = None, target_path: str = None) -> list:
+    """
+    Return a labelled field list for a given object name.
+    Priority:
+      1. Actual columns from files (if paths provided)
+      2. Object config key_fields
+      3. All SAP known fields for that object type
+    Each entry: {field, label, in_source, in_target, common, selected}
+    """
+    from core.object_config import get_object_config
+    cfg        = load_config()
+    sel_set    = set(cfg.get("selected_fields", []))
+    obj_cfg    = get_object_config(name)
+    key_fields = obj_cfg.get("key_fields", [])
+
+    custom = _get_custom_labels()
+
+    def make_entry(col, in_src, in_tgt):
+        return {
+            "field":     col,
+            "label":     get_label(col, custom),   # KUNNR -> Customer Number etc
+            "in_source": in_src,
+            "in_target": in_tgt,
+            "common":    in_src and in_tgt,
+            "selected":  len(sel_set) == 0 or col in sel_set,
+        }
+
+    # If we have actual files, read their real columns
+    if source_path and target_path:
+        try:
+            src_cols, tgt_cols = _read_file_headers(source_path, tgt_path=target_path)
+            src_set = set(src_cols)
+            tgt_set = set(tgt_cols)
+            common   = sorted(src_set & tgt_set)
+            src_only = sorted(src_set - tgt_set)
+            tgt_only = sorted(tgt_set - src_set)
+            fields = []
+            for c in common:   fields.append(make_entry(c, True,  True))
+            for c in src_only: fields.append(make_entry(c, True,  False))
+            for c in tgt_only: fields.append(make_entry(c, False, True))
+            return fields
+        except Exception:
+            pass
+
+    # Fall back to object config key fields
+    if key_fields:
+        return [make_entry(f, True, True) for f in key_fields]
+
+    # Last resort: return all known SAP fields
+    return [make_entry(f, True, True) for f in SAP_FIELD_LABELS]
+
+
+def _read_file_headers(src_path: str, tgt_path: str = None):
+    """Read just the header row from CSV/XLSX — very fast, no full load."""
+    import csv
+
+    def headers(path, delim=","):
+        p = Path(path)
+        if not p.exists():
+            return []
+        if p.suffix.lower() in (".xlsx", ".xls"):
+            import openpyxl
+            wb   = openpyxl.load_workbook(str(p), read_only=True, data_only=True)
+            ws   = wb.active
+            cols = [str(c.value).strip().upper()
+                    for c in next(ws.iter_rows(max_row=1)) if c.value]
+            wb.close()
+            return cols
+        with open(str(p), encoding="utf-8-sig") as f:
+            reader = csv.reader(f, delimiter=delim)
+            return [c.strip().upper() for c in next(reader)]
+
+    src_cols = headers(src_path) if src_path else []
+    tgt_cols = headers(tgt_path) if tgt_path else []
+    return src_cols, tgt_cols
 
 
 # ── Validation runner ─────────────────────────────────────────────────────────
@@ -294,19 +354,19 @@ def run_validation(name, source_path, target_path):
     cfg             = load_config()
     pass_threshold  = float(cfg.get("pass_threshold", 100.0))
     selected_fields = cfg.get("selected_fields", [])
-    custom_labels   = str(LABELS_FILE) if LABELS_FILE.exists() else None
+    custom          = _get_custom_labels()
 
-    # Auto-detect SAP object config from the table name
+    # Auto-detect SAP object config
     from core.object_config import get_object_config
     obj_cfg  = get_object_config(name)
-    join_key = obj_cfg.get("join_key", None)   # None = auto-detect from data
+    join_key = obj_cfg.get("join_key", None)
 
-    # If no fields manually selected use the object's key fields as smart default
+    # Smart default: if no manual selection, use object key fields
     effective_fields = selected_fields
     if not effective_fields and obj_cfg.get("key_fields"):
         effective_fields = obj_cfg["key_fields"]
         log_event(
-            f"{name}: using {len(effective_fields)} key fields "
+            f"{name}: auto-selected {len(effective_fields)} key fields "
             f"from {obj_cfg.get('description', name)} config",
             "info",
         )
@@ -317,7 +377,7 @@ def run_validation(name, source_path, target_path):
     if src_mb > 50 or tgt_mb > 50:
         log_event(
             f"{name}: large files ({src_mb:.1f} MB / {tgt_mb:.1f} MB) "
-            f"— validation may take a few minutes",
+            f"— this may take a few minutes",
             "warn",
         )
 
@@ -325,18 +385,22 @@ def run_validation(name, source_path, target_path):
         pass_threshold=pass_threshold,
         selected_fields=effective_fields if effective_fields else None,
         join_key=join_key,
-        custom_labels=custom_labels,
+        custom_labels=custom if custom else None,
     )
 
     result          = validator.validate(source_path, target_path)
     ss              = result.summary_stats
     business_status = calculate_business_status(result, pass_threshold)
 
+    # ── Build field rows with full mismatch detail ────────────────────────────
     field_rows = []
     for fr in result.field_results:
+        # Resolve English label: KUNNR -> "Customer Number"
+        label = get_label(fr.field_source, custom)
+
         field_rows.append({
             "field":          fr.field_source,
-            "field_label":    fr.field_label,
+            "field_label":    label,                  # human-readable name
             "field_target":   fr.field_target,
             "type":           "numeric" if fr.is_numeric else "string",
             "tolerance":      fr.tolerance_used,
@@ -348,31 +412,84 @@ def run_validation(name, source_path, target_path):
             "match_pct":      fr.match_pct,
             "pass_threshold": fr.pass_threshold,
             "status":         fr.status,
-            "mismatches":     fr.mismatch_details[:50],
+            # Full mismatch detail — NOT capped here, capped only for dashboard display
+            "mismatches":     fr.mismatch_details,
+            "mismatch_count": len(fr.mismatch_details),
         })
 
+    # ── Build mapping info with labels ────────────────────────────────────────
     mapping = None
     if result.mapping:
-        from core.field_labels import get_label, load_custom_labels
-        custom = load_custom_labels(str(LABELS_FILE)) if LABELS_FILE.exists() else {}
         mapping = {
             "join_key":           result.mapping.join_key,
-            "join_key_label":     result.mapping.join_key_label,
+            "join_key_label":     get_label(result.mapping.join_key, custom),
             "matched_fields":     result.mapping.matched_fields,
-            "matched_labels":     {f: get_label(f, custom) for f in result.mapping.matched_fields},
+            # Every field gets its English label
+            "matched_labels": {
+                f: get_label(f, custom)
+                for f in result.mapping.matched_fields
+            },
             "source_only_fields": result.mapping.source_only_fields,
+            "source_only_labels": {
+                f: get_label(f, custom)
+                for f in result.mapping.source_only_fields
+            },
             "target_only_fields": result.mapping.target_only_fields,
-            "numeric_fields":     result.mapping.numeric_fields,
-            "tolerance_map":      result.mapping.tolerance_map,
-            "selected_fields":    result.mapping.selected_fields,
-            "pass_threshold":     result.mapping.pass_threshold,
+            "target_only_labels": {
+                f: get_label(f, custom)
+                for f in result.mapping.target_only_fields
+            },
+            "numeric_fields":  result.mapping.numeric_fields,
+            "tolerance_map":   result.mapping.tolerance_map,
+            "selected_fields": result.mapping.selected_fields,
+            "pass_threshold":  result.mapping.pass_threshold,
         }
 
     ts             = datetime.now().strftime("%Y%m%d_%H%M%S")
     excel_filename = f"{name}_{ts}.xlsx"
     excel_path     = REPORTS_DIR / excel_filename
 
-    # Include object metadata in result
+    # ── Build available_fields for Settings field selector ────────────────────
+    # This is what populates the checkboxes in Settings so the user can
+    # pick which fields to validate — with English labels next to SAP codes
+    try:
+        src_cols, tgt_cols = _read_file_headers(source_path, target_path)
+        src_set = set(src_cols)
+        tgt_set = set(tgt_cols)
+        common   = sorted(src_set & tgt_set)
+        src_only = sorted(src_set - tgt_set)
+        tgt_only = sorted(tgt_set - src_set)
+        sel_set  = set(effective_fields)
+        available_fields = []
+        for f in common:
+            available_fields.append({
+                "field":     f,
+                "label":     get_label(f, custom),
+                "in_source": True, "in_target": True, "common": True,
+                "selected":  len(sel_set) == 0 or f in sel_set,
+            })
+        for f in src_only:
+            available_fields.append({
+                "field":     f,
+                "label":     get_label(f, custom),
+                "in_source": True, "in_target": False, "common": False,
+                "selected":  False,
+            })
+        for f in tgt_only:
+            available_fields.append({
+                "field":     f,
+                "label":     get_label(f, custom),
+                "in_source": False, "in_target": True, "common": False,
+                "selected":  False,
+            })
+    except Exception:
+        available_fields = [
+            {"field": fr["field"], "label": fr["field_label"],
+             "in_source": True, "in_target": True, "common": True,
+             "selected": True}
+            for fr in field_rows
+        ]
+
     result_dict = {
         "name":                   name,
         "sap_object":             obj_cfg.get("description", name),
@@ -397,6 +514,7 @@ def run_validation(name, source_path, target_path):
         "errors":                 result.errors,
         "mapping":                mapping,
         "field_results":          field_rows,
+        "available_fields":       available_fields,   # for Settings field selector
         "run_at":                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "excel_file":             excel_filename,
     }
@@ -482,21 +600,21 @@ def scan_and_validate_all():
                 results_store[name] = result
 
                 file_states[name] = {
-                    "state":        "done",
-                    "detected_at":  file_states[name]["detected_at"],
-                    "validated_at": result["run_at"],
-                    "source_file":  pair["source_file"],
-                    "target_file":  pair["target_file"],
-                    "_mtime":       last_mtime,
-                    "status":       result["status"],
-                    "field_status": result["field_status"],
-                    "record_status":result["record_status"],
-                    "message":      result["business_message"],
+                    "state":         "done",
+                    "detected_at":   file_states[name]["detected_at"],
+                    "validated_at":  result["run_at"],
+                    "source_file":   pair["source_file"],
+                    "target_file":   pair["target_file"],
+                    "_mtime":        last_mtime,
+                    "status":        result["status"],
+                    "field_status":  result["field_status"],
+                    "record_status": result["record_status"],
+                    "message":       result["business_message"],
                 }
 
                 level = (
-                    "success" if result["status"] == "PASS" else
-                    "warn"    if result["status"] == "WARNING" else
+                    "success" if result["status"] == "PASS"    else
+                    "warn"    if result["status"] == "WARNING"  else
                     "error"
                 )
                 log_event(
@@ -604,14 +722,8 @@ def upload_target():
 
 
 def _handle_upload(req, dest_dir, side):
-    """
-    Accepts one or more files.
-    The save filename comes from the multipart Content-Disposition filename,
-    which the dashboard sets to the user's chosen rename value.
-    """
     if "file" not in req.files:
         return jsonify({"error": "No file"}), 400
-
     saved = []
     for f in req.files.getlist("file"):
         if not f.filename:
@@ -623,10 +735,8 @@ def _handle_upload(req, dest_dir, side):
         f.save(str(dest_dir / save_name))
         log_event(f"Uploaded to {side}: {save_name}", "info")
         saved.append(save_name)
-
     if saved:
         threading.Thread(target=scan_and_validate_all, daemon=True).start()
-
     return jsonify({"ok": True, "saved": saved})
 
 
@@ -652,14 +762,29 @@ def upload_labels():
 
 @app.route("/api/config", methods=["GET"])
 def api_get_config():
-    cfg       = load_config()
+    cfg = load_config()
+
+    # Build available_fields from the most recently validated result
+    # so Settings field selector always has labels like "Customer Number (KUNNR)"
     available = []
     if results_store:
-        first     = next(iter(results_store.values()))
-        available = [
-            {"field": fr["field"], "label": fr.get("field_label", fr["field"])}
-            for fr in first.get("field_results", [])
-        ]
+        first = next(iter(results_store.values()))
+        # Use available_fields from result if present (set during validation)
+        if first.get("available_fields"):
+            available = first["available_fields"]
+        else:
+            # Fallback: build from field_results with labels
+            custom = _get_custom_labels()
+            available = [
+                {
+                    "field":     fr["field"],
+                    "label":     get_label(fr["field"], custom),
+                    "in_source": True, "in_target": True, "common": True,
+                    "selected":  True,
+                }
+                for fr in first.get("field_results", [])
+            ]
+
     return jsonify({
         "source_dir":       cfg.get("source_dir",      DEFAULT_CONFIG["source_dir"]),
         "target_dir":       cfg.get("target_dir",      DEFAULT_CONFIG["target_dir"]),
@@ -698,8 +823,7 @@ def api_set_config():
             changed = True
             log_event(
                 f"Field selection updated: {len(sel)} fields" if sel
-                else "Field selection: all fields",
-                "info",
+                else "Field selection: all fields", "info",
             )
 
     if changed:
@@ -713,7 +837,7 @@ def api_set_config():
     return jsonify({"ok": True, "config": cfg})
 
 
-# ── Field preview ─────────────────────────────────────────────────────────────
+# ── Field preview (Settings → Load fields from files) ─────────────────────────
 
 @app.route("/api/fields/preview", methods=["POST"])
 def api_fields_preview():
@@ -723,8 +847,7 @@ def api_fields_preview():
     src_delim = data.get("source_delimiter", ",")
     tgt_delim = data.get("target_delimiter", ",")
 
-    from core.field_labels import get_label, load_custom_labels
-    custom = load_custom_labels(str(LABELS_FILE)) if LABELS_FILE.exists() else {}
+    custom = _get_custom_labels()
 
     def read_headers(path, delim):
         p = Path(path)
@@ -767,7 +890,7 @@ def api_fields_preview():
     for col in common:
         fields.append({
             "field":     col,
-            "label":     get_label(col, custom),
+            "label":     get_label(col, custom),   # KUNNR -> Customer Number
             "in_source": True, "in_target": True, "common": True,
             "selected":  len(selected_set) == 0 or col in selected_set,
         })
@@ -793,6 +916,34 @@ def api_fields_preview():
         "tgt_only":  len(tgt_only),
         "errors":    errors,
     })
+
+
+# ── SAP field label lookup (used by dashboard for any field) ──────────────────
+
+@app.route("/api/field-label/<field_name>")
+def api_field_label(field_name):
+    """Return the English label for a single SAP field code."""
+    custom = _get_custom_labels()
+    label  = get_label(field_name.upper(), custom)
+    return jsonify({
+        "field": field_name.upper(),
+        "label": label,
+        "is_known": label != field_name.upper(),
+    })
+
+
+@app.route("/api/field-labels", methods=["POST"])
+def api_field_labels_bulk():
+    """
+    Bulk label lookup.
+    Body: {"fields": ["KUNNR", "MATNR", "KTOKD", ...]}
+    Returns: {"KUNNR": "Customer Number", "MATNR": "Material Number", ...}
+    """
+    data   = request.get_json(force=True)
+    fields = [str(f).strip().upper() for f in data.get("fields", [])]
+    custom = _get_custom_labels()
+    result = {f: get_label(f, custom) for f in fields}
+    return jsonify(result)
 
 
 # ── Manual pair management ────────────────────────────────────────────────────
@@ -832,12 +983,10 @@ def api_pairs_save():
     cfg = load_config()
     cfg["manual_pairs"] = clean
     save_config(cfg)
-
     results_store.clear()
     for n in list(file_states.keys()):
         if file_states[n].get("state") == "done":
             file_states[n]["state"] = "changed"
-
     log_event(f"Manual pairs updated: {len(clean)} pair(s) saved", "info")
     threading.Thread(target=scan_and_validate_all, daemon=True).start()
     return jsonify({"ok": True, "saved": len(clean)})
@@ -863,14 +1012,19 @@ def api_pairs_delete(name):
 
 @app.route("/api/objects")
 def api_objects():
-    """Return the list of supported SAP objects and their config."""
     from core.object_config import SAP_OBJECT_CONFIG
+    custom = _get_custom_labels()
     return jsonify([
         {
             "key":         k,
             "description": v.get("description", k),
             "join_key":    v.get("join_key", ""),
-            "key_fields":  v.get("key_fields", []),
+            "join_key_label": get_label(v.get("join_key", ""), custom),
+            # Include English labels for every key field
+            "key_fields": [
+                {"field": f, "label": get_label(f, custom)}
+                for f in v.get("key_fields", [])
+            ],
         }
         for k, v in SAP_OBJECT_CONFIG.items()
     ])
@@ -880,7 +1034,6 @@ def api_objects():
 
 @app.route("/api/labels/sample")
 def api_labels_sample():
-    from core.field_labels import SAP_FIELD_LABELS
     lines = ["FIELD_NAME,FRIENDLY_LABEL"]
     for k, v in list(SAP_FIELD_LABELS.items())[:20]:
         lines.append(f"{k},{v}")
@@ -927,7 +1080,9 @@ def api_reports():
         {
             "filename": f.name,
             "size_kb":  round(f.stat().st_size / 1024, 1),
-            "modified": datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "modified": datetime.fromtimestamp(f.stat().st_mtime).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
         }
         for f in files
     ])
@@ -969,9 +1124,14 @@ if __name__ == "__main__":
     print(f"  Pass threshold -> {cfg.get('pass_threshold', 100)}%")
     print("  Open           -> http://localhost:5000\n")
 
+    # Print all known SAP field labels on startup so you can verify
+    print(f"  SAP field dictionary: {len(SAP_FIELD_LABELS)} known fields")
+    print(f"  e.g. KUNNR={SAP_FIELD_LABELS.get('KUNNR')}  "
+          f"MATNR={SAP_FIELD_LABELS.get('MATNR')}  "
+          f"KTOKD={SAP_FIELD_LABELS.get('KTOKD')}\n")
+
     threading.Thread(target=scan_and_validate_all, daemon=True).start()
 
-    # Uncomment to enable automatic scanning every 60 seconds:
     # threading.Thread(target=background_watcher, args=(60,), daemon=True).start()
 
     app.run(debug=False, port=5000, use_reloader=False)
