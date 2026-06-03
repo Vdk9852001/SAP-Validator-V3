@@ -35,9 +35,9 @@ header{background:linear-gradient(90deg,#0f2554 0%,#1a3a7c 100%);
 .layout{display:grid;grid-template-columns:260px 1fr;height:calc(100vh - 56px)}
 aside{background:var(--surface);border-right:1px solid var(--border);
   display:flex;flex-direction:column;overflow:hidden}
-.sb-head{padding:12px 14px 6px;font-size:10px;font-weight:700;color:var(--muted);
+.sb-head{padding:12px 14px 6px;font-size:10px;font-weight:700;color:#93c5fd;
   letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border);
-  background:linear-gradient(180deg,#0f2554 0%,var(--surface) 100%);color:#93c5fd}
+  background:linear-gradient(180deg,#0f2554 0%,var(--surface) 100%)}
 #table-list{flex:1;overflow-y:auto}
 .sb-item{display:flex;align-items:center;padding:9px 14px;cursor:pointer;
   border-left:3px solid transparent;transition:background .14s;font-size:12px;gap:7px}
@@ -202,7 +202,6 @@ tr:hover td{background:rgba(29,78,216,.07)}
   padding:3px 10px;border-radius:5px;font-size:11px;font-weight:600;text-decoration:none}
 .rep-dl:hover{background:rgba(29,78,216,.35)}
 
-/* Settings */
 .s-section{margin-bottom:18px}
 .s-section h4{font-size:11px;font-weight:600;color:#93c5fd;text-transform:uppercase;
   letter-spacing:.06em;margin-bottom:9px}
@@ -216,13 +215,11 @@ tr:hover td{background:rgba(29,78,216,.07)}
 .thr-val{font-size:16px;font-weight:700;color:#60a5fa;min-width:44px;text-align:right}
 .thr-note{font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5}
 .save-btn{background:#1d4ed8;color:#fff;border:none;padding:7px 18px;
-  border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;
-  transition:background .2s}
+  border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:background .2s}
 .save-btn:hover{background:#2563eb}
 .s-status{font-size:11px;margin-top:6px;min-height:16px}
 .divider{border:none;border-top:1px solid var(--border);margin:16px 0}
 
-/* Field selector */
 .fs-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .fs-note{font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px}
 .fs-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;
@@ -236,8 +233,7 @@ tr:hover td{background:rgba(29,78,216,.07)}
 .fc-tech{font-size:9px;color:var(--muted)}
 .fs-btns{display:flex;gap:5px;flex-wrap:wrap}
 .fs-btn{font-size:11px;padding:4px 11px;border:1px solid var(--border);
-  border-radius:5px;background:transparent;color:var(--muted);cursor:pointer;
-  transition:all .12s}
+  border-radius:5px;background:transparent;color:var(--muted);cursor:pointer;transition:all .12s}
 .fs-btn:hover{background:var(--surface2);color:var(--text)}
 .fs-count{font-size:11px;color:var(--muted);align-self:center;white-space:nowrap}
 
@@ -246,8 +242,7 @@ tr:hover td{background:rgba(29,78,216,.07)}
   padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer}
 .lbl-btn:hover{background:var(--border);color:var(--text)}
 .samp-dl{color:#93c5fd;font-size:11px;font-weight:600;text-decoration:none;
-  background:rgba(29,78,216,.2);border:1px solid rgba(29,78,216,.4);
-  padding:5px 12px;border-radius:6px}
+  background:rgba(29,78,216,.2);border:1px solid rgba(29,78,216,.4);padding:5px 12px;border-radius:6px}
 .samp-dl:hover{background:rgba(29,78,216,.35)}
 .empty-msg{color:var(--muted);font-size:13px;text-align:center;padding:26px}
 .scanning-dot{width:7px;height:7px;border-radius:50%;background:#e63946;
@@ -316,7 +311,6 @@ input[type=file]{display:none}
 
 <div id="toast-container"></div>
 
-<!-- Activity log -->
 <div class="overlay" id="log-modal">
   <div class="modal">
     <div class="modal-hd"><h3>&#128221; Activity Log</h3><button class="mclose" onclick="closeModal('log-modal')">&times;</button></div>
@@ -324,7 +318,6 @@ input[type=file]{display:none}
   </div>
 </div>
 
-<!-- Excel reports -->
 <div class="overlay" id="rep-modal">
   <div class="modal">
     <div class="modal-hd"><h3>&#128196; Excel Reports</h3><button class="mclose" onclick="closeModal('rep-modal')">&times;</button></div>
@@ -332,7 +325,6 @@ input[type=file]{display:none}
   </div>
 </div>
 
-<!-- Settings -->
 <div class="overlay" id="set-modal">
   <div class="modal" style="width:660px">
     <div class="modal-hd"><h3>&#9881; Settings</h3><button class="mclose" onclick="closeModal('set-modal')">&times;</button></div>
@@ -375,7 +367,6 @@ input[type=file]{display:none}
           without running a scan first. Leave all checked to validate everything automatically.
         </div>
 
-        <!-- Load from files panel -->
         <div style="background:var(--surface2);border:1px solid var(--border);
                     border-radius:8px;padding:12px 14px;margin-bottom:12px">
           <div style="font-size:10px;font-weight:600;color:#93c5fd;text-transform:uppercase;
@@ -386,8 +377,7 @@ input[type=file]{display:none}
               <div style="display:flex;gap:5px">
                 <input type="text" id="prev-src" placeholder="Path or browse..."
                        style="flex:1;background:var(--bg);border:1px solid var(--border);
-                              color:var(--text);padding:6px 8px;border-radius:5px;
-                              font-size:11px;outline:none">
+                              color:var(--text);padding:6px 8px;border-radius:5px;font-size:11px;outline:none">
                 <button class="fs-btn" style="padding:5px 9px;white-space:nowrap"
                         onclick="document.getElementById('prev-src-file').click()">Browse</button>
                 <input type="file" id="prev-src-file" accept=".csv,.xlsx,.xls"
@@ -399,8 +389,7 @@ input[type=file]{display:none}
               <div style="display:flex;gap:5px">
                 <input type="text" id="prev-tgt" placeholder="Path or browse..."
                        style="flex:1;background:var(--bg);border:1px solid var(--border);
-                              color:var(--text);padding:6px 8px;border-radius:5px;
-                              font-size:11px;outline:none">
+                              color:var(--text);padding:6px 8px;border-radius:5px;font-size:11px;outline:none">
                 <button class="fs-btn" style="padding:5px 9px;white-space:nowrap"
                         onclick="document.getElementById('prev-tgt-file').click()">Browse</button>
                 <input type="file" id="prev-tgt-file" accept=".csv,.xlsx,.xls"
@@ -415,15 +404,13 @@ input[type=file]{display:none}
           </div>
         </div>
 
-        <!-- Search -->
         <input type="text" id="fs-search"
                placeholder="Search by field name or SAP code..."
-               style="background:var(--surface2);border:1px solid var(--border);
-                      color:var(--text);padding:6px 10px;border-radius:6px;font-size:11px;
-                      width:100%;outline:none;margin-bottom:7px"
+               style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                      padding:6px 10px;border-radius:6px;font-size:11px;width:100%;
+                      outline:none;margin-bottom:7px"
                oninput="filterFieldCheckboxes()">
 
-        <!-- Filter chips -->
         <div id="fs-filter-bar" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px"></div>
 
         <div class="fs-header">
@@ -458,9 +445,7 @@ input[type=file]{display:none}
             &#128196; Choose label CSV
           </button>
           <input type="file" id="lbl-input" accept=".csv" onchange="uploadLabels(this)">
-          <a class="samp-dl" href="/api/labels/sample" download="sample_labels.csv">
-            &#8595; Sample CSV
-          </a>
+          <a class="samp-dl" href="/api/labels/sample" download="sample_labels.csv">&#8595; Sample CSV</a>
         </div>
         <div class="s-status" id="lbl-st"></div>
         <div id="lbl-current" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
@@ -500,8 +485,11 @@ async function refresh(){
   if(status.last_scan)
     document.getElementById('last-scan').textContent='Scanned: '+status.last_scan;
 
+  // Update badge with threshold AND field selection count
   var thr=status.pass_threshold||100;
-  document.getElementById('thr-badge').textContent='Threshold: '+thr+'%';
+  var selFields=status.selected_fields||[];
+  document.getElementById('thr-badge').textContent=
+    'Threshold: '+thr+'%'+(selFields.length?' | Fields: '+selFields.length:'');
 
   var newE=activity.slice(0,activity.length-lastLogCount);
   if(lastLogCount>0) newE.forEach(function(e){toast(e.message,e.level)});
@@ -701,7 +689,6 @@ function toggleRow(i){
   if(icon) icon.classList.toggle('open',!open);
 }
 
-/* Upload */
 async function uploadFiles(side,input){
   if(!input.files||!input.files.length) return;
   var stEl=document.getElementById(side==='source'?'src-st':'tgt-st');
@@ -737,7 +724,6 @@ async function uploadLabels(input){
   input.value='';
 }
 
-/* Log */
 async function openLog(){
   document.getElementById('log-modal').classList.add('open');
   var activity=await fetch('/api/activity').then(function(r){return r.json()});
@@ -751,7 +737,6 @@ async function openLog(){
   }).join('');
 }
 
-/* Reports */
 async function openReports(){
   document.getElementById('rep-modal').classList.add('open');
   var list=document.getElementById('rep-list');
@@ -767,7 +752,6 @@ async function openReports(){
   }).join('');
 }
 
-/* Settings */
 async function openSettings(){
   document.getElementById('set-modal').classList.add('open');
   var cfg=await fetch('/api/config').then(function(r){return r.json()});
@@ -781,23 +765,39 @@ async function openSettings(){
     :'Using built-in SAP field dictionary.';
 
   var avail=cfg.available_fields||[], sel=cfg.selected_fields||[];
+
   if(avail.length){
+    // Restore checkbox state based on saved selection
     var enriched=avail.map(function(f){
+      // Empty sel = all fields selected
+      var isSelected=sel.length===0||sel.indexOf(f.field)>=0;
       return {field:f.field, label:f.label,
               in_source:true, in_target:true, common:true,
-              selected: sel.length===0||sel.indexOf(f.field)>=0};
+              selected:isSelected};
     });
-    renderFieldCheckboxes(enriched, {common:enriched.length, src_only:0, tgt_only:0});
+    renderFieldCheckboxes(enriched,{common:enriched.length,src_only:0,tgt_only:0});
+
+    // Show current selection status below the grid
+    var st=document.getElementById('field-st');
+    if(sel.length){
+      st.style.color='#93c5fd';
+      st.textContent='Currently validating '+sel.length+' selected field(s). Adjust and click Apply to change.';
+    } else {
+      st.style.color='var(--muted)';
+      st.textContent='Currently validating all fields.';
+    }
   } else {
     document.getElementById('field-checkboxes').innerHTML=
       '<div style="color:var(--muted);font-size:11px;padding:8px;grid-column:1/-1">'+
       'Load fields from files above, or run a scan first.</div>';
     document.getElementById('fs-filter-bar').innerHTML='';
+    document.getElementById('fs-count').textContent='0 selected';
+    document.getElementById('field-st').textContent='';
   }
 }
 
 /* Field preview from files */
-var previewedFiles={src:null, tgt:null};
+var previewedFiles={src:null,tgt:null};
 
 function previewFileSelected(side,input){
   if(!input.files||!input.files.length) return;
@@ -911,13 +911,9 @@ function renderFieldCheckboxes(fields,summary){
 var currentFsFilter='all';
 function setFsFilter(btn,filter){
   document.querySelectorAll('#fs-filter-bar .fs-btn').forEach(function(b){
-    b.style.background='transparent';
-    b.style.borderColor='var(--border)';
-    b.style.color='var(--muted)';
+    b.style.background='transparent';b.style.borderColor='var(--border)';b.style.color='var(--muted)';
   });
-  btn.style.background='var(--accent2)';
-  btn.style.borderColor='var(--accent2)';
-  btn.style.color='#fff';
+  btn.style.background='var(--accent2)';btn.style.borderColor='var(--accent2)';btn.style.color='#fff';
   currentFsFilter=filter;
   filterFieldCheckboxes();
 }
@@ -925,9 +921,7 @@ function setFsFilter(btn,filter){
 function filterFieldCheckboxes(){
   var q=(document.getElementById('fs-search')||{value:''}).value.toLowerCase();
   document.querySelectorAll('#field-checkboxes .fc-item').forEach(function(item){
-    var field=item.dataset.field||'';
-    var label=item.dataset.label||'';
-    var role=item.dataset.role||'';
+    var field=item.dataset.field||'', label=item.dataset.label||'', role=item.dataset.role||'';
     var mf=currentFsFilter==='all'
       ||(currentFsFilter==='common'&&role==='common')
       ||(currentFsFilter==='src_only'&&role==='src_only')
@@ -951,10 +945,11 @@ function updateThrDisplay(){
 }
 
 function updateFsCount(){
-  var checked=document.querySelectorAll('#field-checkboxes input:checked').length;
-  var total=document.querySelectorAll('#field-checkboxes input:not(:disabled)').length;
+  var enabled=document.querySelectorAll('#field-checkboxes input:not(:disabled)');
+  var checked=document.querySelectorAll('#field-checkboxes input:not(:disabled):checked');
+  var total=enabled.length, cnt=checked.length;
   document.getElementById('fs-count').textContent=
-    checked===total&&total>0?'All fields ('+total+')':checked+' of '+total+' selected';
+    (cnt===total&&total>0)?'All fields ('+total+')':cnt+' of '+total+' selected';
 }
 
 function selectAllFields(){
@@ -985,26 +980,57 @@ async function saveThreshold(){
   if(data.ok){
     st.style.color='var(--pass)';
     st.textContent='Threshold set to '+thr+'% \u2014 re-validating\u2026';
-    document.getElementById('thr-badge').textContent='Threshold: '+thr+'%';
-    toast('Pass threshold set to '+thr+'%','info'); setTimeout(refresh,800);
+    toast('Pass threshold set to '+thr+'%','info');
+    setTimeout(refresh,800);
   }else{st.style.color='var(--fail)';st.textContent='Failed'}
 }
 
 async function saveFieldSelection(){
-  var checkboxes=document.querySelectorAll('#field-checkboxes input:not(:disabled)');
-  var total=checkboxes.length;
+  // Only count enabled (common) checkboxes — disabled ones cannot be validated
+  var allEnabled=document.querySelectorAll('#field-checkboxes input:not(:disabled)');
+  var allChecked=document.querySelectorAll('#field-checkboxes input:not(:disabled):checked');
+
+  if(allEnabled.length===0){
+    var st=document.getElementById('field-st');
+    st.style.color='var(--warn)';
+    st.textContent='No fields loaded. Load fields from files or run a scan first.';
+    return;
+  }
+
   var selected=[];
-  checkboxes.forEach(function(cb){if(cb.checked) selected.push(cb.value)});
-  var toSave=selected.length===total?[]:selected;
-  var st=document.getElementById('field-st'); st.textContent='Applying\u2026';
-  var res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({selected_fields:toSave})});
-  var data=await res.json();
-  if(data.ok){
-    st.style.color='var(--pass)';
-    var msg=toSave.length?toSave.length+' fields selected \u2014 re-validating\u2026':'All fields \u2014 re-validating\u2026';
-    st.textContent=msg; toast(msg.split(' \u2014')[0],'info'); setTimeout(refresh,800);
-  }else{st.style.color='var(--fail)';st.textContent='Failed'}
+  allChecked.forEach(function(cb){selected.push(cb.value)});
+
+  // If every enabled field is checked → save empty array (means "all fields")
+  var toSave=(selected.length===allEnabled.length)?[]:selected;
+
+  var st=document.getElementById('field-st');
+  st.style.color='var(--muted)'; st.textContent='Saving\u2026';
+
+  try{
+    var res=await fetch('/api/config',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({selected_fields:toSave})
+    });
+    var data=await res.json();
+    if(data.ok){
+      st.style.color='var(--pass)';
+      var label=toSave.length?toSave.length+' field(s) selected':'All fields selected';
+      st.textContent=label+' \u2014 re-validating\u2026';
+      toast(label+' applied','success');
+
+      // Update header badge immediately
+      var thr=document.getElementById('thr-slider').value;
+      document.getElementById('thr-badge').textContent=
+        'Threshold: '+thr+'%'+(toSave.length?' | Fields: '+toSave.length:'');
+
+      setTimeout(refresh,1200);
+    }else{
+      st.style.color='var(--fail)'; st.textContent=data.error||'Save failed';
+    }
+  }catch(e){
+    st.style.color='var(--fail)'; st.textContent='Error: '+e;
+  }
 }
 
 function closeModal(id){document.getElementById(id).classList.remove('open')}
