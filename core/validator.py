@@ -1,8 +1,9 @@
 """
 SAP Migration Post-Load Validator — Core Engine
-- Auto-detects field mapping, numeric columns, and tolerances from data
-- Supports pass threshold per field (default 100%, configurable e.g. 90%)
-- Supports field selection — only validate chosen fields
+- Auto-detects field mapping from column headers
+- Auto-detects numeric columns by sampling actual data values
+- Auto-detects tolerances based on the scale of values in each numeric column
+- Fully vectorized comparisons for large file performance
 - Resolves SAP technical names to friendly English labels
 """
 
@@ -14,24 +15,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_JOIN_KEY      = "MATNR"
-DEFAULT_PASS_THRESHOLD = 100.0   # % — fields >= this are PASS
+DEFAULT_JOIN_KEY       = "MATNR"
+DEFAULT_PASS_THRESHOLD = 100.0
 
 
 @dataclass
 class FieldResult:
-    field_source:     str
-    field_target:     str
-    field_label:      str
-    total_records:    int
-    matched:          int
-    mismatched:       int
+    field_source:      str
+    field_target:      str
+    field_label:       str
+    total_records:     int
+    matched:           int
+    mismatched:        int
     missing_in_target: int
     missing_in_source: int
-    is_numeric:       bool  = False
-    tolerance_used:   float = None
-    pass_threshold:   float = DEFAULT_PASS_THRESHOLD
-    mismatch_details: list  = field(default_factory=list)
+    is_numeric:        bool  = False
+    tolerance_used:    float = None
+    pass_threshold:    float = DEFAULT_PASS_THRESHOLD
+    mismatch_details:  list  = field(default_factory=list)
 
     @property
     def match_pct(self) -> float:
@@ -41,10 +42,6 @@ class FieldResult:
 
     @property
     def status(self) -> str:
-        # PASS if match_pct meets or exceeds threshold AND no blank issues
-        if self.missing_in_target or self.missing_in_source:
-            # blank issues still count as issues but threshold still applies
-            pass
         return "PASS" if self.match_pct >= self.pass_threshold else "FAIL"
 
 
@@ -59,7 +56,7 @@ class MappingReport:
     tolerance_map:      dict
     total_source_cols:  int
     total_target_cols:  int
-    selected_fields:    list  = field(default_factory=list)  # empty = all
+    selected_fields:    list  = field(default_factory=list)
     pass_threshold:     float = DEFAULT_PASS_THRESHOLD
 
 
@@ -96,18 +93,16 @@ class ValidationResult:
 
 class MaterialValidator:
     """
-    Validates SAP 4.7 CSV vs S/4HANA export.
+    Validates SAP 4.7 CSV vs S/4HANA export for any SAP object.
 
-    Key parameters
-    ──────────────
-    pass_threshold  float   Match % a field needs to be PASS (default 100.0)
-                            e.g. 90.0 means any field ≥ 90% match = PASS
-    selected_fields list    Only validate these fields (technical SAP names).
-                            Empty list = validate all common fields.
-    field_map       dict    Manual column mapping overrides.
-    join_key        str     Force a join key column name.
-    tolerance_map   dict    Per-column numeric tolerance overrides.
-    custom_labels           dict or path to label-override CSV.
+    Parameters
+    ----------
+    field_map       : dict   - manual column mapping overrides
+    tolerance_map   : dict   - per-column numeric tolerance overrides
+    join_key        : str    - force a join key (None = auto-detect)
+    pass_threshold  : float  - match % a field needs to be PASS (default 100)
+    selected_fields : list   - only validate these fields (empty = all)
+    custom_labels   : dict or str path - friendly label overrides
     """
 
     def __init__(
@@ -117,7 +112,7 @@ class MaterialValidator:
         join_key:            str   = None,
         pass_threshold:      float = DEFAULT_PASS_THRESHOLD,
         selected_fields:     list  = None,
-        numeric_sample_rows: int   = 50,
+        numeric_sample_rows: int   = 200,
         numeric_threshold:   float = 0.80,
         custom_labels              = None,
     ):
@@ -144,11 +139,11 @@ class MaterialValidator:
     # ── Entry point ──────────────────────────────────────────────────────────
     def validate(
         self,
-        source_path:      str,
-        target_path:      str,
-        source_delimiter: str = ",",
-        target_delimiter: str = ",",
-        max_mismatch_rows: int = 100,
+        source_path:       str,
+        target_path:       str,
+        source_delimiter:  str = ",",
+        target_delimiter:  str = ",",
+        max_mismatch_rows: int = 500,
     ) -> ValidationResult:
 
         try:
@@ -161,6 +156,7 @@ class MaterialValidator:
                 records_only_in_target=0,
                 errors=[f"Cannot load source file: {e}"]
             )
+
         try:
             tgt_df = self._load_file(target_path, target_delimiter)
         except Exception as e:
@@ -176,8 +172,10 @@ class MaterialValidator:
         if not join_key:
             return ValidationResult(
                 source_file=source_path, target_file=target_path,
-                total_source_records=len(src_df), total_target_records=len(tgt_df),
-                records_matched=0, records_only_in_source=0, records_only_in_target=0,
+                total_source_records=len(src_df),
+                total_target_records=len(tgt_df),
+                records_matched=0, records_only_in_source=0,
+                records_only_in_target=0,
                 errors=[
                     f"No common join key found.\n"
                     f"  Source columns: {src_df.columns.tolist()}\n"
@@ -193,21 +191,24 @@ class MaterialValidator:
         src_keys = set(src_df[join_key].dropna())
         tgt_keys = set(tgt_df[join_key].dropna())
 
-        merged = src_df.merge(tgt_df, on=join_key, how="inner", suffixes=("_src", "_tgt"))
+        merged = src_df.merge(
+            tgt_df, on=join_key, how="inner", suffixes=("_src", "_tgt")
+        )
 
         field_results = []
         for src_col, tgt_col in field_map.items():
             tolerance = mapping_report.tolerance_map.get(src_col)
             fr = self._validate_field(
-                merged, src_col, tgt_col, join_key,
-                tolerance, max_mismatch_rows
+                merged, src_col, tgt_col, join_key, tolerance, max_mismatch_rows
             )
             if fr:
                 field_results.append(fr)
 
         return ValidationResult(
-            source_file=source_path, target_file=target_path,
-            total_source_records=len(src_df), total_target_records=len(tgt_df),
+            source_file=source_path,
+            target_file=target_path,
+            total_source_records=len(src_df),
+            total_target_records=len(tgt_df),
             records_matched=len(src_keys & tgt_keys),
             records_only_in_source=len(src_keys - tgt_keys),
             records_only_in_target=len(tgt_keys - src_keys),
@@ -215,7 +216,7 @@ class MaterialValidator:
             field_results=field_results,
         )
 
-    # ── Numeric detection ────────────────────────────────────────────────────
+    # ── Numeric detection (vectorized) ───────────────────────────────────────
     def _detect_numeric_columns(self, src_df, tgt_df, columns):
         numeric_cols = {}
         for col in columns:
@@ -225,28 +226,26 @@ class MaterialValidator:
                 continue
 
             def parse_rate(series):
-                parsed = 0
-                for v in series:
-                    try:
-                        float(str(v).replace(",", "."))
-                        parsed += 1
-                    except (ValueError, TypeError):
-                        pass
-                return parsed / len(series)
+                converted = pd.to_numeric(
+                    series.astype(str).str.replace(",", ".", regex=False),
+                    errors="coerce"
+                )
+                return converted.notna().sum() / len(series)
 
             if (parse_rate(src_vals) >= self.numeric_threshold and
                     parse_rate(tgt_vals) >= self.numeric_threshold):
+
                 if col in self.tolerance_overrides:
                     tol = self.tolerance_overrides[col]
                 else:
-                    all_vals = []
-                    for v in list(src_vals) + list(tgt_vals):
-                        try:
-                            all_vals.append(abs(float(str(v).replace(",", "."))))
-                        except (ValueError, TypeError):
-                            pass
-                    median = float(np.median(all_vals)) if all_vals else 0.0
+                    all_vals = pd.to_numeric(
+                        pd.concat([src_vals, tgt_vals])
+                        .astype(str).str.replace(",", ".", regex=False),
+                        errors="coerce"
+                    ).dropna().abs()
+                    median = float(all_vals.median()) if len(all_vals) > 0 else 0.0
                     tol    = self._scale_tolerance(median)
+
                 numeric_cols[col] = tol
         return numeric_cols
 
@@ -258,7 +257,7 @@ class MaterialValidator:
         elif median_val < 1000:  return 0.01
         else:                    return 0.1
 
-    # ── Field map builder ─────────────────────────────────────────────────────
+    # ── Field map builder ────────────────────────────────────────────────────
     def _build_field_map(self, src_df, tgt_df, join_key):
         if self.field_map:
             cols    = list(self.field_map.keys())
@@ -268,7 +267,8 @@ class MaterialValidator:
                 join_key=join_key, join_key_label=self._label(join_key),
                 matched_fields=cols, source_only_fields=[],
                 target_only_fields=[], numeric_fields=list(tol_map.keys()),
-                tolerance_map=tol_map, total_source_cols=len(src_df.columns),
+                tolerance_map=tol_map,
+                total_source_cols=len(src_df.columns),
                 total_target_cols=len(tgt_df.columns),
                 selected_fields=self.selected_fields,
                 pass_threshold=self.pass_threshold,
@@ -282,17 +282,17 @@ class MaterialValidator:
         only_tgt = sorted(tgt_cols - src_cols)
 
         # Apply field selection filter
-        if self.selected_fields:
-            validate_cols = [c for c in common if c in self.selected_fields]
-        else:
-            validate_cols = common
+        validate_cols = (
+            [c for c in common if c in self.selected_fields]
+            if self.selected_fields else common
+        )
 
         tol_map = self._detect_numeric_columns(src_df, tgt_df, validate_cols)
         tol_map.update(self.tolerance_overrides)
 
         report = MappingReport(
             join_key=join_key, join_key_label=self._label(join_key),
-            matched_fields=common,            # all common (for info display)
+            matched_fields=common,
             source_only_fields=only_src,
             target_only_fields=only_tgt,
             numeric_fields=sorted(tol_map.keys()),
@@ -305,38 +305,67 @@ class MaterialValidator:
         return {col: col for col in validate_cols}, report
 
     # ── Join key detection ────────────────────────────────────────────────────
-    def _detect_join_key(self, src_df, tgt_df):
+    def _detect_join_key(self, src_df, tgt_df) -> Optional[str]:
         if self.join_key:
-            if self.join_key in src_df.columns and self.join_key in tgt_df.columns:
-                return self.join_key
+            jk = self.join_key.upper()
+            if jk in src_df.columns and jk in tgt_df.columns:
+                return jk
             return None
-        if DEFAULT_JOIN_KEY in src_df.columns and DEFAULT_JOIN_KEY in tgt_df.columns:
-            return DEFAULT_JOIN_KEY
+
+        # Priority list of common SAP join keys
+        PRIORITY_KEYS = [
+            "MATNR", "LIFNR", "KUNNR", "SAKNR", "BELNR",
+            "EBELN", "VBELN", "ANLN1", "KOSTL", "PRCTR", "BANKL",
+        ]
         common = set(src_df.columns) & set(tgt_df.columns)
+
+        for pk in PRIORITY_KEYS:
+            if pk in common:
+                return pk
+
+        # Fallback: first common column
         if common:
             return sorted(common, key=lambda c: (
-                0 if c.upper() in ("MATNR", "MATERIAL", "ID", "KEY") else 1,
+                0 if c.upper() in ("ID", "KEY", "CODE") else 1,
                 len(c)
             ))[0]
+
         return None
 
     # ── File loader ───────────────────────────────────────────────────────────
     def _load_file(self, path: str, delimiter: str) -> pd.DataFrame:
-        if path.lower().endswith((".xlsx", ".xls")):
+        p = str(path).lower()
+        if p.endswith((".xlsx", ".xls")):
             df = pd.read_excel(path, dtype=str)
         else:
-            df = pd.read_csv(path, delimiter=delimiter, dtype=str, encoding="utf-8-sig")
+            df = pd.read_csv(
+                path, delimiter=delimiter, dtype=str,
+                encoding="utf-8-sig", low_memory=False
+            )
         df.columns = df.columns.str.strip().str.upper()
-        df = df.apply(lambda col: col.map(lambda x: x.strip() if isinstance(x, str) else x))
+        # Strip whitespace from all string values — vectorized
+        str_cols = df.select_dtypes(include="object").columns
+        df[str_cols] = df[str_cols].apply(lambda c: c.str.strip())
         return df
 
     def _normalise_key(self, df: pd.DataFrame, col: str) -> pd.DataFrame:
         if col in df.columns:
+            df = df.copy()
             df[col] = df[col].astype(str).str.strip().str.lstrip("0").str.upper()
         return df
 
-    # ── Field comparator ─────────────────────────────────────────────────────
-    def _validate_field(self, merged, src_col, tgt_col, join_key, tolerance, max_rows):
+    # ── Field comparator (fully vectorized) ──────────────────────────────────
+    def _validate_field(
+        self,
+        merged:    pd.DataFrame,
+        src_col:   str,
+        tgt_col:   str,
+        join_key:  str,
+        tolerance: Optional[float],
+        max_rows:  int,
+    ) -> Optional[FieldResult]:
+
+        # Resolve actual column names after merge suffixes
         if src_col == tgt_col:
             src_actual = src_col + "_src" if src_col + "_src" in merged.columns else src_col
             tgt_actual = tgt_col + "_tgt" if tgt_col + "_tgt" in merged.columns else tgt_col
@@ -350,59 +379,114 @@ class MaterialValidator:
             return None
 
         total = len(merged)
-        mismatches, matched, miss_src, miss_tgt = [], 0, 0, 0
+        if total == 0:
+            return FieldResult(
+                field_source=src_col, field_target=tgt_col,
+                field_label=self._label(src_col),
+                total_records=0, matched=0, mismatched=0,
+                missing_in_target=0, missing_in_source=0,
+                is_numeric=(tolerance is not None),
+                tolerance_used=tolerance,
+                pass_threshold=self.pass_threshold,
+            )
 
-        for _, row in merged.iterrows():
-            sv      = row.get(src_actual, np.nan) if src_present else np.nan
-            tv      = row.get(tgt_actual, np.nan) if tgt_present else np.nan
-            mat_num = row.get(join_key, "")
+        sv = (merged[src_actual] if src_present
+              else pd.Series([""] * total, index=merged.index))
+        tv = (merged[tgt_actual] if tgt_present
+              else pd.Series([""] * total, index=merged.index))
+        keys = merged[join_key]
 
-            sv_null = pd.isna(sv) or str(sv).strip() in ("", "nan", "NaN", "None")
-            tv_null = pd.isna(tv) or str(tv).strip() in ("", "nan", "NaN", "None")
+        # ── Null detection (vectorized) ───────────────────────────────────────
+        NULL_VALS = {"", "nan", "none", "null"}
+        sv_null = sv.isna() | sv.astype(str).str.strip().str.lower().isin(NULL_VALS)
+        tv_null = tv.isna() | tv.astype(str).str.strip().str.lower().isin(NULL_VALS)
 
-            if sv_null and tv_null:
-                matched += 1; continue
-            if sv_null:
-                miss_src += 1
-                if len(mismatches) < max_rows:
-                    mismatches.append({"material": mat_num, "source_value": "(blank)",
-                                       "target_value": str(tv), "issue": "Missing in source"})
-                continue
-            if tv_null:
-                miss_tgt += 1
-                if len(mismatches) < max_rows:
-                    mismatches.append({"material": mat_num, "source_value": str(sv),
-                                       "target_value": "(blank)", "issue": "Missing in target"})
-                continue
+        both_null  = sv_null & tv_null
+        miss_src_m = sv_null & ~tv_null
+        miss_tgt_m = ~sv_null & tv_null
+        valid      = ~sv_null & ~tv_null
 
+        sv_v   = sv[valid]
+        tv_v   = tv[valid]
+        keys_v = keys[valid]
+
+        # ── Comparison (vectorized) ───────────────────────────────────────────
+        if tolerance is not None:
+            sv_f = pd.to_numeric(
+                sv_v.astype(str).str.replace(",", ".", regex=False), errors="coerce"
+            )
+            tv_f = pd.to_numeric(
+                tv_v.astype(str).str.replace(",", ".", regex=False), errors="coerce"
+            )
+            numeric_ok   = sv_f.notna() & tv_f.notna()
+            diff         = (sv_f - tv_f).abs()
+            match_mask   = numeric_ok & (diff <= tolerance)
+            mismatch_mask = numeric_ok & (diff > tolerance)
+        else:
+            sv_s = sv_v.astype(str).str.strip().str.upper()
+            tv_s = tv_v.astype(str).str.strip().str.upper()
+            match_mask    = sv_s == tv_s
+            mismatch_mask = ~match_mask
+
+        matched        = int(both_null.sum()) + int(match_mask.sum())
+        miss_src_count = int(miss_src_m.sum())
+        miss_tgt_count = int(miss_tgt_m.sum())
+        mismatched     = int(mismatch_mask.sum())
+
+        # ── Build mismatch detail rows (capped) ───────────────────────────────
+        mismatches = []
+
+        if miss_src_count > 0:
+            for _, row in merged[miss_src_m].head(max_rows).iterrows():
+                mismatches.append({
+                    "material":     str(row[join_key]),
+                    "source_value": "(blank)",
+                    "target_value": str(row.get(tgt_actual, "")),
+                    "issue":        "Missing in source",
+                })
+
+        if miss_tgt_count > 0 and len(mismatches) < max_rows:
+            for _, row in merged[miss_tgt_m].head(max_rows - len(mismatches)).iterrows():
+                mismatches.append({
+                    "material":     str(row[join_key]),
+                    "source_value": str(row.get(src_actual, "")),
+                    "target_value": "(blank)",
+                    "issue":        "Missing in target",
+                })
+
+        if mismatched > 0 and len(mismatches) < max_rows:
+            mismatch_df = merged[valid][mismatch_mask].head(max_rows - len(mismatches))
             if tolerance is not None:
-                try:
-                    sv_f = float(str(sv).replace(",", "."))
-                    tv_f = float(str(tv).replace(",", "."))
-                    if abs(sv_f - tv_f) <= tolerance:
-                        matched += 1
-                    elif len(mismatches) < max_rows:
-                        mismatches.append({
-                            "material": mat_num, "source_value": sv_f, "target_value": tv_f,
-                            "issue": f"Delta={abs(sv_f-tv_f):.4f} (tol+-{tolerance})",
-                        })
-                    continue
-                except ValueError:
-                    pass
-
-            if str(sv).strip().upper() == str(tv).strip().upper():
-                matched += 1
-            elif len(mismatches) < max_rows:
-                mismatches.append({"material": mat_num, "source_value": str(sv),
-                                   "target_value": str(tv), "issue": "Value mismatch"})
+                sv_mf   = sv_f[mismatch_mask].reindex(mismatch_df.index)
+                tv_mf   = tv_f[mismatch_mask].reindex(mismatch_df.index)
+                diff_mf = diff[mismatch_mask].reindex(mismatch_df.index)
+                for idx, row in mismatch_df.iterrows():
+                    mismatches.append({
+                        "material":     str(row[join_key]),
+                        "source_value": float(sv_mf.get(idx, 0)),
+                        "target_value": float(tv_mf.get(idx, 0)),
+                        "issue":        f"Delta={float(diff_mf.get(idx, 0)):.4f} (tol+-{tolerance})",
+                    })
+            else:
+                for _, row in mismatch_df.iterrows():
+                    mismatches.append({
+                        "material":     str(row[join_key]),
+                        "source_value": str(row.get(src_actual, "")),
+                        "target_value": str(row.get(tgt_actual, "")),
+                        "issue":        "Value mismatch",
+                    })
 
         return FieldResult(
-            field_source=src_col, field_target=tgt_col,
+            field_source=src_col,
+            field_target=tgt_col,
             field_label=self._label(src_col),
-            total_records=total, matched=matched,
-            mismatched=max(0, total - matched - miss_src - miss_tgt),
-            missing_in_target=miss_tgt, missing_in_source=miss_src,
-            is_numeric=(tolerance is not None), tolerance_used=tolerance,
+            total_records=total,
+            matched=matched,
+            mismatched=mismatched,
+            missing_in_target=miss_tgt_count,
+            missing_in_source=miss_src_count,
+            is_numeric=(tolerance is not None),
+            tolerance_used=tolerance,
             pass_threshold=self.pass_threshold,
             mismatch_details=mismatches,
         )
