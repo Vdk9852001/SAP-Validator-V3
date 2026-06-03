@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
     "target_dir": str(BASE_DIR / "data" / "target"),
     "pass_threshold": 100.0,
     "selected_fields": [],
+    "manual_pairs": [],
 }
 
 results_store = {}
@@ -102,35 +103,142 @@ def cleanup_old_reports(keep_latest=20):
             log_event(f"Could not delete old report {old_file.name}: {e}", "warn")
 
 
-def discover_pairs():
+# ── File discovery ─────────────────────────────────────────────────────────────
+def get_available_files():
+    """List all files in source and target dirs."""
     SOURCE_DIR, TARGET_DIR = get_dirs()
+    src_files = sorted(
+        [f for f in SOURCE_DIR.iterdir() if f.suffix.lower() in SUPPORTED_EXT],
+        key=lambda f: f.name.upper(),
+    )
+    tgt_files = sorted(
+        [f for f in TARGET_DIR.iterdir() if f.suffix.lower() in SUPPORTED_EXT],
+        key=lambda f: f.name.upper(),
+    )
+    return src_files, tgt_files
+
+
+def discover_pairs():
+    """
+    Build pairs from:
+      1. Manual pairs saved in config.json  (user-defined, any name combo)
+      2. Auto-matched pairs by exact filename  (fallback for convenience)
+    Manual pairs always take priority.
+    """
+    SOURCE_DIR, TARGET_DIR = get_dirs()
+    cfg = load_config()
+    manual_pairs = cfg.get("manual_pairs", [])
 
     src_files = {
-        f.stem.upper(): f
+        f.name: f
         for f in SOURCE_DIR.iterdir()
         if f.suffix.lower() in SUPPORTED_EXT
     }
     tgt_files = {
-        f.stem.upper(): f
+        f.name: f
         for f in TARGET_DIR.iterdir()
         if f.suffix.lower() in SUPPORTED_EXT
     }
 
     pairs = []
-    for name in sorted(set(src_files) | set(tgt_files)):
-        sp = str(src_files[name]) if name in src_files else None
-        tp = str(tgt_files[name]) if name in tgt_files else None
-        has_pair = name in src_files and name in tgt_files
-        mtime = max(Path(sp).stat().st_mtime, Path(tp).stat().st_mtime) if has_pair else None
+    used_src = set()
+    used_tgt = set()
+
+    # ── Manual pairs first ────────────────────────────────────────────────────
+    for mp in manual_pairs:
+        src_name = mp.get("source_file", "")
+        tgt_name = mp.get("target_file", "")
+        name = mp.get("name", "").upper().strip() or Path(src_name).stem.upper()
+
+        sp = str(src_files[src_name]) if src_name in src_files else None
+        tp = str(tgt_files[tgt_name]) if tgt_name in tgt_files else None
+        has_pair = sp is not None and tp is not None
+        mtime = (
+            max(Path(sp).stat().st_mtime, Path(tp).stat().st_mtime)
+            if has_pair
+            else None
+        )
+
         pairs.append({
             "name": name,
             "source_path": sp,
             "target_path": tp,
             "has_pair": has_pair,
             "mtime": mtime,
-            "source_file": Path(sp).name if sp else None,
-            "target_file": Path(tp).name if tp else None,
+            "source_file": Path(sp).name if sp else src_name,
+            "target_file": Path(tp).name if tp else tgt_name,
+            "match_type": "manual",
+            "missing": [] if has_pair else (
+                (["source"] if not sp else []) +
+                (["target"] if not tp else [])
+            ),
         })
+
+        if sp:
+            used_src.add(src_name)
+        if tp:
+            used_tgt.add(tgt_name)
+
+    # ── Auto pairs: exact filename match for anything not manually paired ─────
+    src_by_stem = {}
+    for fname, fpath in src_files.items():
+        if fname not in used_src:
+            stem = Path(fname).stem.upper()
+            src_by_stem[stem] = (fname, fpath)
+
+    tgt_by_stem = {}
+    for fname, fpath in tgt_files.items():
+        if fname not in used_tgt:
+            stem = Path(fname).stem.upper()
+            tgt_by_stem[stem] = (fname, fpath)
+
+    for stem in sorted(set(src_by_stem) & set(tgt_by_stem)):
+        src_fname, src_fpath = src_by_stem[stem]
+        tgt_fname, tgt_fpath = tgt_by_stem[stem]
+        mtime = max(src_fpath.stat().st_mtime, tgt_fpath.stat().st_mtime)
+        pairs.append({
+            "name": stem,
+            "source_path": str(src_fpath),
+            "target_path": str(tgt_fpath),
+            "has_pair": True,
+            "mtime": mtime,
+            "source_file": src_fname,
+            "target_file": tgt_fname,
+            "match_type": "auto",
+            "missing": [],
+        })
+        used_src.add(src_fname)
+        used_tgt.add(tgt_fname)
+
+    # ── Unmatched files ───────────────────────────────────────────────────────
+    for fname, fpath in src_files.items():
+        if fname not in used_src:
+            pairs.append({
+                "name": Path(fname).stem.upper(),
+                "source_path": str(fpath),
+                "target_path": None,
+                "has_pair": False,
+                "mtime": None,
+                "source_file": fname,
+                "target_file": None,
+                "match_type": "unmatched",
+                "missing": ["target"],
+            })
+
+    for fname, fpath in tgt_files.items():
+        if fname not in used_tgt:
+            pairs.append({
+                "name": Path(fname).stem.upper(),
+                "source_path": None,
+                "target_path": str(fpath),
+                "has_pair": False,
+                "mtime": None,
+                "source_file": None,
+                "target_file": fname,
+                "match_type": "unmatched",
+                "missing": ["source"],
+            })
+
     return pairs
 
 
@@ -231,7 +339,9 @@ def run_validation(name, source_path, target_path):
             "join_key": result.mapping.join_key,
             "join_key_label": result.mapping.join_key_label,
             "matched_fields": result.mapping.matched_fields,
-            "matched_labels": {f: get_label(f, custom) for f in result.mapping.matched_fields},
+            "matched_labels": {
+                f: get_label(f, custom) for f in result.mapping.matched_fields
+            },
             "source_only_fields": result.mapping.source_only_fields,
             "target_only_fields": result.mapping.target_only_fields,
             "numeric_fields": result.mapping.numeric_fields,
@@ -322,8 +432,11 @@ def scan_and_validate_all():
             prev_state = file_states.get(name, {})
 
             if not existing:
+                match_type = pair.get("match_type", "auto")
+                match_note = f" [{match_type} match]" if match_type != "auto" else ""
                 log_event(
-                    f"{name}: new file pair — {pair['source_file']} + {pair['target_file']}",
+                    f"{name}: new file pair{match_note} — "
+                    f"{pair['source_file']} + {pair['target_file']}",
                     "info",
                 )
             elif prev_state.get("_mtime") != last_mtime:
@@ -342,7 +455,9 @@ def scan_and_validate_all():
             }
 
             try:
-                result = run_validation(name, pair["source_path"], pair["target_path"])
+                result = run_validation(
+                    name, pair["source_path"], pair["target_path"]
+                )
                 result["_mtime"] = last_mtime
                 results_store[name] = result
 
@@ -369,9 +484,9 @@ def scan_and_validate_all():
                 log_event(
                     f"{name}: {result['status']} — "
                     f"{result['business_message']} "
-                    f"Matched records: {result['records_matched']:,}, "
-                    f"Only in source: {result['records_only_in_source']:,}, "
-                    f"Only in target: {result['records_only_in_target']:,}",
+                    f"Matched: {result['records_matched']:,}, "
+                    f"Source only: {result['records_only_in_source']:,}, "
+                    f"Target only: {result['records_only_in_target']:,}",
                     level,
                 )
 
@@ -402,6 +517,8 @@ def background_watcher(interval=60):
         time.sleep(interval)
 
 
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
 @app.route("/")
 def index():
     return render_template("dashboard.html")
@@ -418,7 +535,6 @@ def api_status():
     pairs = discover_pairs()
     cfg = load_config()
     source_dir, target_dir = get_dirs()
-    selected_fields = cfg.get("selected_fields", [])
 
     return jsonify({
         "last_scan": scan_status["last_scan"],
@@ -434,8 +550,12 @@ def api_status():
         "total_tables": len([p for p in pairs if p["has_pair"]]),
         "unmatched": len([p for p in pairs if not p["has_pair"]]),
         "pass_threshold": cfg.get("pass_threshold", 100.0),
-        "selected_fields": selected_fields,
-        "validation_mode": "all_fields" if not selected_fields else "selected_fields",
+        "selected_fields": cfg.get("selected_fields", []),
+        "validation_mode": (
+            "all_fields"
+            if not cfg.get("selected_fields")
+            else "selected_fields"
+        ),
     })
 
 
@@ -457,6 +577,8 @@ def api_activity():
     return jsonify(list(reversed(activity_log)))
 
 
+# ── Upload — supports renamed files via multipart filename ────────────────────
+
 @app.route("/api/upload/source", methods=["POST"])
 def upload_source():
     return _handle_upload(request, get_dirs()[0], "source")
@@ -465,6 +587,41 @@ def upload_source():
 @app.route("/api/upload/target", methods=["POST"])
 def upload_target():
     return _handle_upload(request, get_dirs()[1], "target")
+
+
+def _handle_upload(req, dest_dir, side):
+    """
+    Accepts one or more files.
+    The filename used for saving is taken from the multipart Content-Disposition
+    filename, which the browser sets to whatever name was passed as the third
+    argument of fd.append('file', fileObject, customName).
+    This lets the dashboard rename files on upload without any extra API params.
+    """
+    if "file" not in req.files:
+        return jsonify({"error": "No file"}), 400
+
+    saved = []
+    for f in req.files.getlist("file"):
+        if not f.filename:
+            continue
+
+        # Use the filename provided by the client (may be renamed)
+        # secure_filename sanitises path traversal but preserves the name
+        save_name = secure_filename(f.filename)
+        suffix = Path(save_name).suffix.lower()
+
+        if suffix not in SUPPORTED_EXT:
+            return jsonify({"error": f"Unsupported file type: {save_name}"}), 400
+
+        dest = dest_dir / save_name
+        f.save(str(dest))
+        log_event(f"Uploaded to {side}: {save_name}", "info")
+        saved.append(save_name)
+
+    if saved:
+        threading.Thread(target=scan_and_validate_all, daemon=True).start()
+
+    return jsonify({"ok": True, "saved": saved})
 
 
 @app.route("/api/upload/labels", methods=["POST"])
@@ -485,24 +642,7 @@ def upload_labels():
     return jsonify({"ok": True, "filename": safe_name})
 
 
-def _handle_upload(req, dest_dir, side):
-    if "file" not in req.files:
-        return jsonify({"error": "No file"}), 400
-    saved = []
-    for f in req.files.getlist("file"):
-        if not f.filename:
-            continue
-        safe_name = secure_filename(f.filename)
-        suffix = Path(safe_name).suffix.lower()
-        if suffix not in SUPPORTED_EXT:
-            return jsonify({"error": f"Unsupported: {safe_name}"}), 400
-        f.save(str(dest_dir / safe_name))
-        log_event(f"Uploaded to {side}: {safe_name}", "info")
-        saved.append(safe_name)
-    if saved:
-        threading.Thread(target=scan_and_validate_all, daemon=True).start()
-    return jsonify({"ok": True, "saved": saved})
-
+# ── Config ────────────────────────────────────────────────────────────────────
 
 @app.route("/api/config", methods=["GET"])
 def api_get_config():
@@ -546,7 +686,11 @@ def api_set_config():
             log_event(f"Pass threshold updated to {thr}%", "info")
 
     if "selected_fields" in data:
-        sel = [str(f).strip().upper() for f in data["selected_fields"] if str(f).strip()]
+        sel = [
+            str(f).strip().upper()
+            for f in data["selected_fields"]
+            if str(f).strip()
+        ]
         if sel != cfg.get("selected_fields", []):
             cfg["selected_fields"] = sel
             changed = True
@@ -566,6 +710,8 @@ def api_set_config():
     return jsonify({"ok": True, "config": cfg})
 
 
+# ── Field preview ─────────────────────────────────────────────────────────────
+
 @app.route("/api/fields/preview", methods=["POST"])
 def api_fields_preview():
     """
@@ -573,9 +719,9 @@ def api_fields_preview():
     Returns all columns with friendly labels so the user can choose which
     fields to validate before the scan runs.
     """
-    data      = request.get_json(force=True)
-    src_path  = data.get("source_path", "").strip()
-    tgt_path  = data.get("target_path", "").strip()
+    data = request.get_json(force=True)
+    src_path = data.get("source_path", "").strip()
+    tgt_path = data.get("target_path", "").strip()
     src_delim = data.get("source_delimiter", ",")
     tgt_delim = data.get("target_delimiter", ",")
 
@@ -615,57 +761,121 @@ def api_fields_preview():
     if tgt_err:
         errors["target"] = tgt_err
 
-    src_set  = set(src_cols or [])
-    tgt_set  = set(tgt_cols or [])
-    common   = sorted(src_set & tgt_set)
+    src_set = set(src_cols or [])
+    tgt_set = set(tgt_cols or [])
+    common = sorted(src_set & tgt_set)
     src_only = sorted(src_set - tgt_set)
     tgt_only = sorted(tgt_set - src_set)
 
-    cfg          = load_config()
+    cfg = load_config()
     selected_set = set(cfg.get("selected_fields", []))
 
     fields = []
-
     for col in common:
         fields.append({
-            "field":     col,
-            "label":     get_label(col, custom),
+            "field": col,
+            "label": get_label(col, custom),
             "in_source": True,
             "in_target": True,
-            "common":    True,
-            "selected":  len(selected_set) == 0 or col in selected_set,
+            "common": True,
+            "selected": len(selected_set) == 0 or col in selected_set,
         })
-
     for col in src_only:
         fields.append({
-            "field":     col,
-            "label":     get_label(col, custom),
+            "field": col,
+            "label": get_label(col, custom),
             "in_source": True,
             "in_target": False,
-            "common":    False,
-            "selected":  False,
+            "common": False,
+            "selected": False,
         })
-
     for col in tgt_only:
         fields.append({
-            "field":     col,
-            "label":     get_label(col, custom),
+            "field": col,
+            "label": get_label(col, custom),
             "in_source": False,
             "in_target": True,
-            "common":    False,
-            "selected":  False,
+            "common": False,
+            "selected": False,
         })
 
     return jsonify({
-        "fields":    fields,
+        "fields": fields,
         "src_count": len(src_cols or []),
         "tgt_count": len(tgt_cols or []),
-        "common":    len(common),
-        "src_only":  len(src_only),
-        "tgt_only":  len(tgt_only),
-        "errors":    errors,
+        "common": len(common),
+        "src_only": len(src_only),
+        "tgt_only": len(tgt_only),
+        "errors": errors,
     })
 
+
+# ── Manual pair management ────────────────────────────────────────────────────
+
+@app.route("/api/files/list")
+def api_files_list():
+    """Return all files in source and target dirs for pair manager dropdowns."""
+    src_files, tgt_files = get_available_files()
+    return jsonify({
+        "source_files": [f.name for f in src_files],
+        "target_files": [f.name for f in tgt_files],
+    })
+
+
+@app.route("/api/pairs", methods=["GET"])
+def api_pairs_get():
+    cfg = load_config()
+    return jsonify(cfg.get("manual_pairs", []))
+
+
+@app.route("/api/pairs", methods=["POST"])
+def api_pairs_save():
+    data = request.get_json(force=True)
+    pairs = data.get("pairs", [])
+    seen_names = set()
+    clean = []
+    for p in pairs:
+        name = str(p.get("name", "")).strip().upper()
+        src_file = str(p.get("source_file", "")).strip()
+        tgt_file = str(p.get("target_file", "")).strip()
+        if not name or not src_file or not tgt_file:
+            continue
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        clean.append({"name": name, "source_file": src_file, "target_file": tgt_file})
+
+    cfg = load_config()
+    cfg["manual_pairs"] = clean
+    save_config(cfg)
+
+    results_store.clear()
+    for n in list(file_states.keys()):
+        if file_states[n].get("state") == "done":
+            file_states[n]["state"] = "changed"
+
+    log_event(f"Manual pairs updated: {len(clean)} pair(s) saved", "info")
+    threading.Thread(target=scan_and_validate_all, daemon=True).start()
+    return jsonify({"ok": True, "saved": len(clean)})
+
+
+@app.route("/api/pairs/<name>", methods=["DELETE"])
+def api_pairs_delete(name):
+    cfg = load_config()
+    pairs = cfg.get("manual_pairs", [])
+    before = len(pairs)
+    pairs = [p for p in pairs if p["name"].upper() != name.upper()]
+    cfg["manual_pairs"] = pairs
+    save_config(cfg)
+    removed = before - len(pairs)
+    if removed:
+        results_store.pop(name.upper(), None)
+        file_states.pop(name.upper(), None)
+        log_event(f"Manual pair removed: {name}", "info")
+    return jsonify({"ok": True, "removed": removed})
+
+
+# ── Labels sample ─────────────────────────────────────────────────────────────
 
 @app.route("/api/labels/sample")
 def api_labels_sample():
@@ -679,6 +889,8 @@ def api_labels_sample():
         headers={"Content-Disposition": "attachment; filename=sample_labels.csv"},
     )
 
+
+# ── Download / reports ────────────────────────────────────────────────────────
 
 @app.route("/api/download/<name>")
 def api_download(name):
