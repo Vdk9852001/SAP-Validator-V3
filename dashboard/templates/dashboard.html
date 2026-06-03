@@ -44,6 +44,7 @@ aside{background:var(--surface);border-right:1px solid var(--border);
 .sp-chg{background:rgba(245,158,11,.2);color:var(--warn)}
 .sp-val{background:rgba(99,102,241,.2);color:#a5b4fc;animation:blink .8s infinite}
 .sp-pass{background:rgba(34,197,94,.15);color:var(--pass)}
+.sp-warn{background:rgba(245,158,11,.15);color:var(--warn)}
 .sp-fail{background:rgba(239,68,68,.15);color:var(--fail)}
 .sp-err{background:rgba(239,68,68,.15);color:var(--fail)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
@@ -76,6 +77,7 @@ main{overflow-y:auto;padding:20px}
 .det-right{display:flex;align-items:center;gap:7px;flex-shrink:0}
 .st-pill{font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px}
 .pill-pass{background:rgba(34,197,94,.15);color:var(--pass)}
+.pill-warn{background:rgba(245,158,11,.15);color:var(--warn)}
 .pill-fail{background:rgba(239,68,68,.15);color:var(--fail)}
 .pill-err{background:rgba(245,158,11,.15);color:var(--warn)}
 .dl-btn{background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3);
@@ -467,10 +469,11 @@ function renderSidebar(status){
     else if(st==='error')     pill='<span class="sp sp-err">Error</span>';
     else{
       var r=allResults[pair.name], s=r?r.status:'';
-      if(s==='PASS')      pill='<span class="sp sp-pass">PASS</span>';
-      else if(s==='FAIL') pill='<span class="sp sp-fail">FAIL</span>';
-      else if(s==='ERROR')pill='<span class="sp sp-err">ERROR</span>';
-      else                pill='<span class="sp sp-new">&hellip;</span>';
+      if(s==='PASS')           pill='<span class="sp sp-pass">PASS</span>';
+      else if(s==='WARNING')   pill='<span class="sp sp-warn">WARNING</span>';
+      else if(s==='FAIL')      pill='<span class="sp sp-fail">FAIL</span>';
+      else if(s==='ERROR')     pill='<span class="sp sp-err">ERROR</span>';
+      else                     pill='<span class="sp sp-new">&hellip;</span>';
     }
     var act=activeTable===pair.name?'active':'';
     html+='<div class="sb-item '+act+'" onclick="selectTable(\''+pair.name+'\',this)">'+
@@ -510,7 +513,11 @@ function renderDetail(r){
   document.getElementById('welcome').style.display='none';
   var det=document.getElementById('detail');
   det.style.display='block';
-  var pc=r.status==='PASS'?'pill-pass':r.status==='ERROR'?'pill-err':'pill-fail';
+  var pc =
+    r.status === 'PASS' ? 'pill-pass' :
+    r.status === 'WARNING' ? 'pill-warn' :
+    r.status === 'ERROR' ? 'pill-err' :
+    'pill-fail';
   var fs=allStates[r.name]||{};
   var thr=r.pass_threshold||100;
   var sel=r.selected_fields||[];
@@ -525,6 +532,12 @@ function renderDetail(r){
 
   var err=r.errors&&r.errors.length
     ?'<div class="err-box">&#10060; '+r.errors.join('<br>')+'</div>':'';
+
+  var businessMsg = r.business_message
+    ? '<div class="banner ' + (r.status === 'WARNING' ? 'bn-chg' : 'bn-val') + '">' +
+      esc(r.business_message) +
+      '</div>'
+    : '';
 
   // Threshold info bar
   var thrInfo='<div class="thr-info">&#9989; Pass threshold: <b>'+thr+'%</b>'
@@ -602,7 +615,7 @@ function renderDetail(r){
       '<td>'+stBadge+'</td></tr>'+detRow;
   }).join('');
 
-  det.innerHTML=banner+
+  det.innerHTML=banner+businessMsg+
     '<div class="det-hdr">'+
     '<div><div class="det-title">'+r.name+'</div>'+
     '<div class="det-meta">'+r.source_file+' &harr; '+r.target_file+
